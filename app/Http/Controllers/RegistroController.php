@@ -89,7 +89,7 @@ class RegistroController extends Controller
             'ñ' => 'ñ', 'Ñ' => 'Ñ' // Mantener Ñ
         ];
         
-        return strtr($cadena, $mapeo);
+        return strtr($cadena, $mapeo); 
     }
 
     /**
