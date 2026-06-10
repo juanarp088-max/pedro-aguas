@@ -4,7 +4,7 @@ import { NavUser } from '@/components/nav-user';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { type NavItem } from '@/types';
 import { Link, useForm, usePage } from '@inertiajs/react';
-import { LayoutGrid, LogOut, Notebook, Users, HelpCircle } from 'lucide-react'; // Agregar HelpCircle o Question icon
+import { LayoutGrid, LogOut, Users, HelpCircle } from 'lucide-react'; // Agregar HelpCircle o Question icon
 import AppLogo from './app-logo';
 
 const mainNavItems: NavItem[] = [
@@ -28,11 +28,7 @@ export function AppSidebar() {
 
     if (auth.user?.roles?.includes('admin')) {
         footerNavItems.push(
-            {
-                title: 'Agregar Beneficio',
-                url: route('admin.beneficios.index'),
-                icon: Notebook,
-            },
+  
             {
                 title: 'Agregar Encuestador',
                 url: route('admin.users.index'),
@@ -41,7 +37,7 @@ export function AppSidebar() {
             {
                 title: 'Gestionar Preguntas',
                 url: route('preguntas.index'), // Cambiado a preguntas.index
-                icon: HelpCircle, // Icono corregido
+                icon: HelpCircle,
             },
         );
     }
