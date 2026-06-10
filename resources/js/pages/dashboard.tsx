@@ -24,7 +24,7 @@ export default function Dashboard() {
                 <div className="grid auto-rows-min gap-4 md:grid-cols-3">
                     
                     {/* CUADRO 1: Registro (Solo Admin) */}
-                    {(isAdmin || isRegistro  || isConsulta ) && (
+                    {(isAdmin || isRegistro || isConsulta ) && (
                         <Link 
                             href='/consulta/registro' 
                             className="relative flex aspect-video items-center justify-center overflow-hidden rounded-xl border border-neutral-200 bg-[#1FB7E9] p-6 text-center transition hover:opacity-90"
@@ -34,7 +34,7 @@ export default function Dashboard() {
                     )}
 
                     {/* CUADRO 2: Consultar Usuario (Admin o Editor) */}
-                    {(isAdmin || isRegistro) && (
+                    {(isAdmin || isConsulta) && (
                         <Link 
                             href={route('consulta.index')} 
                             className="relative flex aspect-video items-center justify-center overflow-hidden rounded-xl border border-neutral-200 bg-[#FEE11B] p-6 text-center transition hover:opacity-90"
