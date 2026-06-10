@@ -22,9 +22,7 @@ Homestead.json
 Homestead.yaml
 npm-debug.log
 yarn-error.log
-<<<<<<< HEAD
 node_modules/
-=======
-node_modules/
+/public/build
+/public/hot
 
->>>>>>> 4507a72dbf590a515a093ad5054b9a4b4880bbc1

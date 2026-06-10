@@ -7,6 +7,8 @@ import { FormEvent, useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
 import withReactContent from "sweetalert2-react-content";
 import { useAutocompletado } from '@/hooks/useAutocompletado';
+import { useRoles } from '@/hooks/useRoles'; // ← Agrega esta importación
+
 
 const MySwal = withReactContent(Swal);
 
@@ -62,7 +64,7 @@ const normalizarObjeto = (obj: any): Record<string, string> => {
 
 export default function ConsultaDinamica() {
     const { props } = usePage<any>();
-    
+    const { isAdmin, isConsulta, isRegistro } = useRoles();
     const beneficiarios: any[] = props.beneficiarios || [];
     const filtros = props.filtros || {};
     const haFiltrado = !!(filtros.nombre || filtros.apellido || filtros.nacimiento);
@@ -444,7 +446,7 @@ export default function ConsultaDinamica() {
                                         <th className="p-3">Beneficiario</th>
                                         <th className="p-3">F. Nacimiento</th>
                                         <th className="p-3">Domicilio</th>
-                                        <th className="p-3 text-center">Acciones</th>
+                                     {isAdmin &&   <th className="p-3 text-center">Acciones</th>}
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-neutral-100">
@@ -466,7 +468,7 @@ export default function ConsultaDinamica() {
                                                     <td className="p-3 text-xs text-neutral-500">
                                                         {p.municipio}, Col. {p.colonia}
                                                     </td>
-                                                    <td className="p-3 text-center">
+                                                    {isAdmin &&<td className="p-3 text-center">
                                                         <div className="flex items-center justify-center gap-2">
                                                             <button 
                                                                 type="button" 
@@ -483,7 +485,7 @@ export default function ConsultaDinamica() {
                                                                 Eliminar
                                                             </button>
                                                         </div>
-                                                    </td>
+                                                    </td>}
                                                 </tr>
                                             );
                                         })
