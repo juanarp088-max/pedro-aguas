@@ -32,7 +32,7 @@ class Registro extends Model
         'numint',
         'telefono',
         'papa',
-            // 'id_beneficio',
+        'tarjeta_soluciones',
             'id_user',
         ];
 
