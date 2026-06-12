@@ -36,11 +36,13 @@ class RegistroController extends Controller
             'genero'     => ['required', 'string', Rule::in(['M', 'F', 'OTRO'])],
             'edad'       => ['required', 'numeric', 'min:0', 'max:120'],
             'nacimiento' => ['required', 'date', 'before_or_equal:today', 'after_or_equal:1900-01-01'],
-            'numext'     => ['required', 'numeric', 'min:1'],
-            'numint'     => ['nullable', 'numeric', 'min:1'],
-            'telefono'   => ['required', 'digits:10'],
+           'numext' => ['nullable', 'string', 'max:10', 'regex:/^[\p{L}\d\s\-\/\.]+$/u'],
+            'numint' => ['nullable', 'string', 'max:10', 'regex:/^[\p{L}\d\s\-\/\.]+$/u'], 
+            'telefono'   => ['nullable', 'digits:10'],
             'respuestas' => ['nullable', 'array'],
             'detalles'   => ['nullable', 'array'],
+            'tarjeta_soluciones'   => ['nullable', 'digits:7'],
+
         ];
     }
 
@@ -67,8 +69,8 @@ class RegistroController extends Controller
             'numeric'                    => 'El campo :attribute debe ser numérico.',
             'digits'                     => 'El campo :attribute debe tener exactamente :digits dígitos.',
             'cp.digits'                  => 'El código postal debe tener 5 dígitos.',
-            'numext.min'                 => 'El número exterior debe ser mayor a 0.',
-            'numint.min'                 => 'El número interior debe ser mayor a 0.',
+            'numext.regex' => 'El número exterior solo puede contener letras, números, espacios, guiones, puntos o barras (/).',
+            'numint.regex' => 'El número interior solo puede contener letras, números, espacios, guiones, puntos o barras (/).',
         ];
     }
 
@@ -142,7 +144,7 @@ class RegistroController extends Controller
     /**
      * Convertir datos a mayúsculas
      */
-    private function convertirMayusculas(array $data, array $excluir = ['nacimiento', 'edad', 'telefono'])
+    private function convertirMayusculas(array $data, array $excluir = ['nacimiento', 'edad', 'telefono' , 'tarjeta_soluciones'])
     {
         foreach ($data as $key => $value) {
             if (in_array($key, $excluir)) {
@@ -272,6 +274,13 @@ class RegistroController extends Controller
 
         $datosFinales = $this->convertirMayusculas($datosParaCrear);
         $datosFinales['id_user'] = Auth::id();
+        $camposANull = ['tarjeta_soluciones', 'numext', 'numint', 'telefono'];
+        foreach ($camposANull as $campo) {
+            if (empty($datosFinales[$campo])) {
+                $datosFinales[$campo] = null;
+            }
+        }
+       
         
         if (is_null($datosFinales['sapellido'] ?? null)) {
             $datosFinales['papa'] = true;
