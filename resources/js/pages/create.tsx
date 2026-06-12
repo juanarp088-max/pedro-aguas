@@ -54,7 +54,7 @@ export default function Create() {
         cp: '',
         nacimiento: '',
         edad: '',
-        tarjeta_soluciones: '',
+        tarjeta: '',
         genero: '',
         respuestas: {} as Record<number, string>,
         detalles: {} as Record<number, string>,
@@ -193,10 +193,10 @@ export default function Create() {
 
             <div className="w-full space-y-6 p-10">
                 {/* FORMULARIO PRINCIPAL */}
-                <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm">
-                    <div className="border-b border-neutral-100 bg-gradient-to-r from-white to-neutral-50 px-8 pt-6 pb-4">
-                        <h2 className="text-2xl font-bold tracking-tight text-neutral-800">Registro de Beneficiario</h2>
-                        <p className="mt-1 text-sm text-neutral-500">Introduzca los datos del beneficiario.</p>
+                <div className="rounded-xl border border-neutral-200 bg-white shadow-sm overflow-hidden">
+                    <div className="px-8 pt-6 pb-4 border-b border-neutral-100 bg-gradient-to-r from-white to-neutral-50">
+                        <h2 className="text-2xl font-bold text-neutral-800 tracking-tight">Registro de Beneficiario</h2>
+                        <p className="text-sm text-neutral-500 mt-1">Introduzca los datos del beneficiario.</p>
                     </div>
 
                     <div className="p-8">
@@ -213,7 +213,7 @@ export default function Create() {
                                     <h3 className="text-lg font-bold text-amber-800">{advertencia}</h3>
                                 </div>
 
-                                <p className="mb-4 text-sm font-medium text-amber-700">Datos de Beneficiario con Coincidencias en el Sistema:</p>
+                                <p className="mb-4 text-sm text-amber-700 font-medium">Datos de Beneficiario con Coincidencias en el Sistema:</p>
 
                                 <div className="mb-4 overflow-x-auto rounded-lg border border-amber-200 bg-white">
                                     <table className="w-full text-left text-sm text-gray-700">
@@ -227,7 +227,7 @@ export default function Create() {
                                         </thead>
                                         <tbody className="divide-y divide-gray-100">
                                             {coincidencias?.map((item: any) => (
-                                                <tr key={item.id} className="transition-colors hover:bg-amber-50/50">
+                                                <tr key={item.id} className="hover:bg-amber-50/50 transition-colors">
                                                     <td className="px-6 py-3 font-medium">
                                                         {item.nombre} {item.snombre} {item.apellido} {item.sapellido}
                                                     </td>
@@ -265,7 +265,7 @@ export default function Create() {
                         <form onSubmit={handleSubmit} className="space-y-8">
                             {/* Datos Personales */}
                             <div>
-                                <h3 className="mb-4 border-b border-neutral-200 pb-2 text-base font-bold text-neutral-800">Datos Personales</h3>
+                                <h3 className="text-base font-bold text-neutral-800 mb-4 pb-2 border-b border-neutral-200">Datos Personales</h3>
                                 <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
                                     <InputField
                                         label="Primer Nombre"
@@ -310,7 +310,7 @@ export default function Create() {
 
                             {/* Domicilio */}
                             <div>
-                                <h3 className="mb-4 border-b border-neutral-200 pb-2 text-base font-bold text-neutral-800">Domicilio</h3>
+                                <h3 className="text-base font-bold text-neutral-800 mb-4 pb-2 border-b border-neutral-200">Domicilio</h3>
                                 <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
                                     <div className="relative">
                                         <InputField
@@ -395,7 +395,7 @@ export default function Create() {
 
                             {/* Información Adicional */}
                             <div>
-                                <h3 className="mb-4 border-b border-neutral-200 pb-2 text-base font-bold text-neutral-800">Información Adicional</h3>
+                                <h3 className="text-base font-bold text-neutral-800 mb-4 pb-2 border-b border-neutral-200">Información Adicional</h3>
                                 <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
                                     <InputField
                                         label="Código Postal"
@@ -442,28 +442,16 @@ export default function Create() {
                                         error={errors.edad}
                                         placeholder="Edad"
                                     />
-                                    <InputField
-                                        label="Tarjeta Soluciones"
-                                        id="tarjeta_soluciones"
-                                        type="number"
-                                        value={data.tarjeta_soluciones}
-                                        onChange={(e) => {
-                                            const val = e.target.value.slice(0, 7);
-                                            setData('tarjeta_soluciones', val);
-                                        }}
-                                        error={errors.tarjeta_soluciones}
-                                        placeholder="ej: 1234567"
-                                    />
                                 </div>
                             </div>
 
                             {/* Preguntas de Evaluación */}
                             {props.preguntas && props.preguntas.length > 0 && (
                                 <div>
-                                    <h3 className="mb-4 border-b border-neutral-200 pb-2 text-base font-bold text-neutral-800">
+                                    <h3 className="text-base font-bold text-neutral-800 mb-4 pb-2 border-b border-neutral-200">
                                         Evaluación Social - {props.preguntas.length} Preguntas
                                     </h3>
-                                    <div className="custom-scrollbar grid max-h-[500px] grid-cols-1 gap-5 overflow-y-auto pr-2 md:grid-cols-2">
+                                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                                         {props.preguntas.map((pregunta: any) => (
                                             <PreguntaInput key={pregunta.id} pregunta={pregunta} data={data} setData={setData} />
                                         ))}
@@ -472,33 +460,24 @@ export default function Create() {
                             )}
 
                             {/* Botones de acción */}
-                            <div className="flex justify-end gap-4 border-t border-neutral-200 pt-6">
+                            <div className="flex justify-end gap-4 pt-6 border-t border-neutral-200">
                                 <button
                                     type="button"
                                     onClick={() => window.history.back()}
-                                    className="rounded-lg border-2 border-neutral-300 bg-white px-6 py-2.5 text-sm font-semibold text-neutral-700 transition-all duration-200 hover:border-neutral-400 hover:bg-neutral-50"
+                                    className="rounded-lg border-2 border-neutral-300 bg-white px-6 py-2.5 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 hover:border-neutral-400 transition-all duration-200"
                                 >
                                     Cancelar
                                 </button>
                                 <button
                                     type="submit"
-                                    className="transform rounded-lg bg-[#1FB7E9] px-8 py-2.5 text-sm font-bold text-white shadow-md transition-all duration-200 hover:scale-[1.02] hover:bg-[#1699c2] hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="rounded-lg bg-[#1FB7E9] px-8 py-2.5 text-sm font-bold text-white shadow-md hover:bg-[#1699c2] hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02]"
                                     disabled={processing}
                                 >
                                     {processing ? (
                                         <span className="flex items-center gap-2">
-                                            <svg
-                                                className="h-4 w-4 animate-spin text-white"
-                                                xmlns="http://www.w3.org/2000/svg"
-                                                fill="none"
-                                                viewBox="0 0 24 24"
-                                            >
+                                            <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                <path
-                                                    className="opacity-75"
-                                                    fill="currentColor"
-                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                                ></path>
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                             </svg>
                                             Guardando...
                                         </span>
