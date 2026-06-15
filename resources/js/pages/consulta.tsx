@@ -6,9 +6,6 @@ import axios from 'axios';
 import { FormEvent, useState, useEffect } from 'react';
 import Swal from 'sweetalert2';
 import withReactContent from "sweetalert2-react-content";
-import { useAutocompletado } from '@/hooks/useAutocompletado';
-import { useRoles } from '@/hooks/useRoles'; // ← Agrega esta importación
-
 
 const MySwal = withReactContent(Swal);
 
@@ -18,24 +15,20 @@ interface BreadcrumbItem {
     href: string; 
 }
 
+interface Opcion {
+    id: number;
+    opcion: string;
+    valor: string;
+    requiere_especificar: boolean;
+    orden: number;
+}
+
 interface Pregunta {
     id: number;
     descripcion: string;
     activa: boolean;
-}
-
-interface RespuestaUsuario {
-    id?: number;
-    registro_id?: number;
-    pregunta_id: number;
-    catalogo_id: number | null;
-    valor_extra: string | null;
-    detalle: string | null;
-    catalogo?: {
-        id: number;
-        nombre: string;
-        pregunta_id: number;
-    };
+    tipo: 'simple' | 'multiple';
+    opciones?: Opcion[];
 }
 
 declare const route: any;
@@ -62,17 +55,53 @@ const normalizarObjeto = (obj: any): Record<string, string> => {
     });
 };
 
+// Hook simple para autocompletado
+function useAutocompletado(url: string, value: string, delay: number = 300) {
+    const [lista, setLista] = useState<any[]>([]);
+    const [mostrar, setMostrar] = useState(false);
+    const [cargando, setCargando] = useState(false);
+
+    useEffect(() => {
+        const buscar = async () => {
+            if (value.length < 2) {
+                setLista([]);
+                setMostrar(false);
+                return;
+            }
+            
+            setCargando(true);
+            try {
+                const response = await axios.get(`${url}?q=${encodeURIComponent(value)}`);
+                setLista(response.data);
+                setMostrar(true);
+            } catch (error) {
+                console.error('Error en autocompletado:', error);
+                setLista([]);
+            } finally {
+                setCargando(false);
+            }
+        };
+
+        const timer = setTimeout(buscar, delay);
+        return () => clearTimeout(timer);
+    }, [value, url, delay]);
+
+    return { lista, mostrar, setMostrar, cargando };
+}
+
 export default function ConsultaDinamica() {
     const { props } = usePage<any>();
-    const { isAdmin, isConsulta, isRegistro } = useRoles();
+    const isAdmin = props.auth?.user?.roles?.includes('admin') || false;
     const beneficiarios: any[] = props.beneficiarios || [];
     const filtros = props.filtros || {};
-    const haFiltrado = !!(filtros.nombre || filtros.apellido || filtros.nacimiento);
+    const haFiltrado = !!(filtros.nombre || filtros.snombre || filtros.apellido || filtros.sapellido || filtros.nacimiento);
     const preguntas: Pregunta[] = props.preguntas || [];
 
     // Estados para la consulta de filtros
     const [fNombre, setFNombre] = useState(filtros.nombre || '');
+    const [fSegundoNombre, setFSegundoNombre] = useState(filtros.snombre || '');
     const [fApellido, setFApellido] = useState(filtros.apellido || '');
+    const [fSegundoApellido, setFSegundoApellido] = useState(filtros.sapellido || '');
     const [fNacimiento, setFNacimiento] = useState(filtros.nacimiento || '');
 
     const [beneficiarioSeleccionado, setBeneficiarioSeleccionado] = useState<any | null>(null);
@@ -97,8 +126,7 @@ export default function ConsultaDinamica() {
         tarjeta: '', 
         genero: '',
         respuestas: {} as Record<number, string>,
-        catalogo_ids: {} as Record<number, number | null>,
-        detalles: {} as Record<number, string>,
+        respuestas_multiple: {} as Record<number, { opcion_id: number; especificacion: string }>,
     });
 
     // Limpiar errores del servidor cuando se selecciona un nuevo beneficiario
@@ -107,14 +135,20 @@ export default function ConsultaDinamica() {
         clearErrors();
     }, [beneficiarioSeleccionado]);
 
-    // Custom Hooks para manejar búsquedas asíncronas con debounce incorporado
-    const colonias = useAutocompletado('/api/colonias/buscar', data.colonia, cargandoDatos);
-    const calles = useAutocompletado('/api/calles/buscar', data.calle, cargandoDatos);
+    // Custom Hooks para manejar búsquedas asíncronas
+    const colonias = useAutocompletado('/api/colonias/buscar', data.colonia, 300);
+    const calles = useAutocompletado('/api/calles/buscar', data.calle, 300);
 
     const handleBuscar = (e: FormEvent) => {
         e.preventDefault();
         router.get(route('consulta.index'), 
-            { nombre: fNombre, apellido: fApellido, nacimiento: fNacimiento },
+            { 
+                nombre: fNombre, 
+                snombre: fSegundoNombre,
+                apellido: fApellido,
+                sapellido: fSegundoApellido,
+                nacimiento: fNacimiento 
+            },
             { preserveState: true, preserveScroll: true }
         );
     };
@@ -125,40 +159,9 @@ export default function ConsultaDinamica() {
         const proxyB = normalizarObjeto(b);
         
         try {
-            const url = `/api/beneficiarios/${proxyB.id}/respuestas`;
-            const responseRespuestas = await axios.get(url);
-            const respuestasData: RespuestaUsuario[] = Array.isArray(responseRespuestas.data) ? responseRespuestas.data : [];
+            const response = await axios.get(`/api/beneficiarios/${proxyB.id}/completo`);
+            const dataCompleta = response.data;
             
-            const respuestasFormateadas: Record<number, string> = {};
-            const catalogoIdsFormateados: Record<number, number | null> = {};
-            const detallesFormateados: Record<number, string> = {};
-            
-            respuestasData.forEach((item: RespuestaUsuario) => {
-                if (item.valor_extra) {
-                    respuestasFormateadas[item.pregunta_id] = item.valor_extra;
-                }
-                
-                if (item.catalogo_id) {
-                    catalogoIdsFormateados[item.pregunta_id] = item.catalogo_id;
-                }
-                
-                // Para la pregunta 6, el detalle puede venir del catálogo o del campo detalle
-                if (item.pregunta_id === 6) {
-                    if (item.catalogo && item.catalogo.nombre) {
-                        detallesFormateados[item.pregunta_id] = item.catalogo.nombre;
-                    } else if (item.detalle) {
-                        detallesFormateados[item.pregunta_id] = item.detalle;
-                    }
-                } else {
-                    // Para otras preguntas, solo mostrar detalle si es SI
-                    if (item.catalogo && item.catalogo.nombre && item.valor_extra === 'SI') {
-                        detallesFormateados[item.pregunta_id] = item.catalogo.nombre;
-                    } else if (item.detalle && item.valor_extra === 'SI') {
-                        detallesFormateados[item.pregunta_id] = item.detalle;
-                    }
-                }
-            });
-
             setData({
                 nombre: proxyB.nombre || '',
                 snombre: proxyB.snombre || '',
@@ -175,9 +178,8 @@ export default function ConsultaDinamica() {
                 edad: proxyB.edad || '',
                 tarjeta: proxyB.tarjeta || '',
                 genero: proxyB.genero || '',
-                respuestas: respuestasFormateadas,
-                catalogo_ids: catalogoIdsFormateados,
-                detalles: detallesFormateados,
+                respuestas: dataCompleta.respuestas || {},
+                respuestas_multiple: dataCompleta.respuestas_multiple || {},
             });
 
             setTimeout(() => {
@@ -191,7 +193,7 @@ export default function ConsultaDinamica() {
             
             MySwal.fire({
                 title: 'Error',
-                text: 'No se pudieron cargar las respuestas del beneficiario',
+                text: error.response?.data?.message || 'No se pudieron cargar las respuestas del beneficiario',
                 icon: 'error',
                 confirmButtonColor: '#EF4444'
             });
@@ -256,8 +258,7 @@ export default function ConsultaDinamica() {
         const dataToSend = {
             ...data,
             respuestas: data.respuestas,
-            catalogo_ids: data.catalogo_ids,
-            detalles: data.detalles
+            respuestas_multiple: data.respuestas_multiple,
         };
 
         router.put(route('consulta.update', bId), dataToSend, {
@@ -279,7 +280,15 @@ export default function ConsultaDinamica() {
             onError: (errors) => {
                 console.error("Errores del servidor:", errors);
                 
-                if (errors && Object.keys(errors).length > 0) {
+                // Mostrar error de duplicado de forma clara
+                if (errors && errors.duplicado) {
+                    MySwal.fire({
+                        title: 'Ya existe un usuario registrado con estos datos',
+                        //text: errors.duplicado,
+                        icon: 'warning',
+                        confirmButtonColor: '#EF4444'
+                    });
+                } else if (errors && Object.keys(errors).length > 0) {
                     setErroresServidor(errors);
                     
                     const firstErrorField = Object.keys(errors)[0];
@@ -288,12 +297,27 @@ export default function ConsultaDinamica() {
                         errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         errorElement.focus();
                     }
-                }
-                
-                if (errors && errors.message && typeof errors.message === 'string') {
+                    
+                    // Mostrar el primer error
+                    const firstError = errors[firstErrorField];
+                    const errorMessage = Array.isArray(firstError) ? firstError[0] : firstError;
+                    MySwal.fire({
+                        title: 'Error de validación',
+                        text: errorMessage || 'Por favor verifique los datos',
+                        icon: 'error',
+                        confirmButtonColor: '#EF4444'
+                    });
+                } else if (errors && errors.message && typeof errors.message === 'string') {
                     MySwal.fire({
                         title: 'Error del sistema',
                         text: errors.message,
+                        icon: 'error',
+                        confirmButtonColor: '#EF4444'
+                    });
+                } else {
+                    MySwal.fire({
+                        title: 'Error',
+                        text: 'Ocurrió un error al actualizar el registro',
                         icon: 'error',
                         confirmButtonColor: '#EF4444'
                     });
@@ -310,42 +334,18 @@ export default function ConsultaDinamica() {
             }
             return undefined;
         }
-        return erroresServidor[fieldName] || errors[fieldName];
+        if (erroresServidor[fieldName]) {
+            return erroresServidor[fieldName];
+        }
+        return (errors as any)[fieldName];
     };
 
-    const handleRespuestaChange = (preguntaId: number, valor: string) => {
+    // Manejar cambio en preguntas simples (Sí/No)
+    const handleRespuestaSimple = (preguntaId: number, valor: string) => {
         setData('respuestas', {
             ...data.respuestas,
             [preguntaId]: valor
         });
-        
-        // Para la pregunta 6: si cambia a "SI", limpiar el detalle de NO
-        if (preguntaId === 6) {
-            if (valor === 'SI') {
-                // Si responde SI, limpiamos el detalle (porque solo aplica para NO)
-                setData('detalles', {
-                    ...data.detalles,
-                    [preguntaId]: ''
-                });
-                setData('catalogo_ids', {
-                    ...data.catalogo_ids,
-                    [preguntaId]: null
-                });
-            }
-            // Si responde NO, mantenemos el detalle para que el usuario lo llene
-        } else {
-            // Para otras preguntas: si cambia a "NO", limpiar el detalle
-            if (valor === 'NO') {
-                setData('detalles', {
-                    ...data.detalles,
-                    [preguntaId]: ''
-                });
-                setData('catalogo_ids', {
-                    ...data.catalogo_ids,
-                    [preguntaId]: null
-                });
-            }
-        }
         
         if (erroresServidor[`respuestas.${preguntaId}`]) {
             const newErrors = { ...erroresServidor };
@@ -354,33 +354,25 @@ export default function ConsultaDinamica() {
         }
     };
 
-    const handleDetalleChange = (preguntaId: number, valor: string) => {
-        setData('detalles', {
-            ...data.detalles,
-            [preguntaId]: valor
+    // Manejar cambio en preguntas múltiples
+    const handleOpcionMultiple = (preguntaId: number, opcionId: number, requiereEspecificar: boolean, especificacionActual: string) => {
+        setData('respuestas_multiple', {
+            ...data.respuestas_multiple,
+            [preguntaId]: {
+                opcion_id: opcionId,
+                especificacion: requiereEspecificar ? especificacionActual : ''
+            }
         });
     };
 
-    // Verificar si debe mostrar el campo de detalle para una pregunta específica
-    const shouldShowDetalle = (pregunta: Pregunta) => {
-        const respuesta = data.respuestas[pregunta.id];
-        
-        if (pregunta.id === 6) {
-            // Para pregunta 6: mostrar el campo cuando la respuesta es "NO"
-            return respuesta === 'NO';
-        } else {
-            // Para otras preguntas: mostrar el campo cuando la respuesta es "SI"
-            return respuesta === 'SI';
-        }
-    };
-
-    // Obtener el placeholder para el campo de detalle
-    const getDetallePlaceholder = (pregunta: Pregunta) => {
-        if (pregunta.id === 6) {
-            return "Por favor, especifique el motivo o situación...";
-        } else {
-            return "Por favor, proporcione más detalles...";
-        }
+    const handleEspecificacionMultiple = (preguntaId: number, opcionId: number, valor: string) => {
+        setData('respuestas_multiple', {
+            ...data.respuestas_multiple,
+            [preguntaId]: {
+                opcion_id: opcionId,
+                especificacion: valor
+            }
+        });
     };
 
     return (
@@ -394,7 +386,7 @@ export default function ConsultaDinamica() {
                         <h2 className="text-xl font-bold text-neutral-800">Criterios de Consulta</h2>
                         <p className="text-xs text-neutral-500">Tipee los datos para filtrar la base de datos.</p>
                     </div>
-                    <form onSubmit={handleBuscar} className="grid grid-cols-1 gap-4 sm:grid-cols-3 md:grid-cols-4 items-end">
+                    <form onSubmit={handleBuscar} className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-5 items-end">
                         <div>
                             <label className="block text-xs font-semibold text-neutral-700 uppercase mb-1.5">Nombre</label>
                             <input 
@@ -406,12 +398,32 @@ export default function ConsultaDinamica() {
                             />
                         </div>
                         <div>
+                            <label className="block text-xs font-semibold text-neutral-700 uppercase mb-1.5">Segundo Nombre</label>
+                            <input 
+                                type="text" 
+                                value={fSegundoNombre} 
+                                onChange={(e) => setFSegundoNombre(e.target.value)} 
+                                placeholder="Segundo Nombre" 
+                                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-800 focus:border-[#1FB7E9] focus:outline-none focus:ring-1 focus:ring-[#1FB7E9]" 
+                            />
+                        </div>
+                        <div>
                             <label className="block text-xs font-semibold text-neutral-700 uppercase mb-1.5">Apellido</label>
                             <input 
                                 type="text" 
                                 value={fApellido} 
                                 onChange={(e) => setFApellido(e.target.value)} 
                                 placeholder="Primer Apellido" 
+                                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-800 focus:border-[#1FB7E9] focus:outline-none focus:ring-1 focus:ring-[#1FB7E9]" 
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-neutral-700 uppercase mb-1.5">Segundo Apellido</label>
+                            <input 
+                                type="text" 
+                                value={fSegundoApellido} 
+                                onChange={(e) => setFSegundoApellido(e.target.value)} 
+                                placeholder="Segundo Apellido" 
                                 className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-800 focus:border-[#1FB7E9] focus:outline-none focus:ring-1 focus:ring-[#1FB7E9]" 
                             />
                         </div>
@@ -446,7 +458,7 @@ export default function ConsultaDinamica() {
                                         <th className="p-3">Beneficiario</th>
                                         <th className="p-3">F. Nacimiento</th>
                                         <th className="p-3">Domicilio</th>
-                                     {isAdmin &&   <th className="p-3 text-center">Acciones</th>}
+                                        {isAdmin && <th className="p-3 text-center">Acciones</th>}
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-neutral-100">
@@ -468,7 +480,7 @@ export default function ConsultaDinamica() {
                                                     <td className="p-3 text-xs text-neutral-500">
                                                         {p.municipio}, Col. {p.colonia}
                                                     </td>
-                                                    {isAdmin &&<td className="p-3 text-center">
+                                                    {isAdmin && <td className="p-3 text-center">
                                                         <div className="flex items-center justify-center gap-2">
                                                             <button 
                                                                 type="button" 
@@ -719,69 +731,105 @@ export default function ConsultaDinamica() {
                                 </div>
                             </div>
 
-                            {/* SECCIÓN DE RESPUESTAS CON RADIO BUTTONS */}
+                            {/* SECCIÓN DE RESPUESTAS */}
                             {preguntas.length > 0 && (
                                 <div className="border-t border-neutral-100 pt-4 mt-4">
                                     <h4 className="text-sm font-bold text-neutral-800 mb-4">
                                         Evaluación Social - {preguntas.length} Preguntas
                                     </h4>
                                     <div className="space-y-4">
-                                        {preguntas.map((pregunta, index) => (
-                                            <div key={pregunta.id} className="border border-neutral-200 rounded-lg p-4 bg-neutral-50/30">
-                                                <label className="block text-sm font-semibold text-neutral-800 mb-3">
-                                                    {index + 1}. {pregunta.descripcion}
-
-
-                                                </label>
-                                                
-                                                <div className="flex gap-6 mb-3">
-                                                    <label className="flex items-center gap-2 cursor-pointer">
-                                                        <input
-                                                            type="radio"
-                                                            name={`pregunta_${pregunta.id}`}
-                                                            value="SI"
-                                                            checked={data.respuestas[pregunta.id] === 'SI'}
-                                                            onChange={(e) => handleRespuestaChange(pregunta.id, e.target.value)}
-                                                            className="w-4 h-4 text-[#1FB7E9] focus:ring-[#1FB7E9]"
-                                                        />
-                                                        <span className="text-sm text-neutral-700">Sí</span>
-                                                    </label>
-                                                    <label className="flex items-center gap-2 cursor-pointer">
-                                                        <input
-                                                            type="radio"
-                                                            name={`pregunta_${pregunta.id}`}
-                                                            value="NO"
-                                                            checked={data.respuestas[pregunta.id] === 'NO'}
-                                                            onChange={(e) => handleRespuestaChange(pregunta.id, e.target.value)}
-                                                            className="w-4 h-4 text-[#1FB7E9] focus:ring-[#1FB7E9]"
-                                                        />
-                                                        <span className="text-sm text-neutral-700">No</span>
-                                                    </label>
-                                                </div>
-                                                
-                                                {/* Campo de detalle/descripción con lógica especial para pregunta 6 */}
-                                                {shouldShowDetalle(pregunta) && (
-                                                    <div className="mt-3">
-                                                        <textarea
-                                                            placeholder={getDetallePlaceholder(pregunta)}
-                                                            value={data.detalles[pregunta.id] || ''}
-                                                            onChange={(e) => handleDetalleChange(pregunta.id, e.target.value)}
-                                                            rows={2}
-                                                            className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:border-[#1FB7E9] focus:outline-none focus:ring-1 focus:ring-[#1FB7E9]"
-                                                        />
-                                                        {/* {data.catalogo_ids[pregunta.id] && (
-                                                            <p className="mt-1 text-xs text-green-600">
-                                                                ✓ Información registrada en catálogo
-                                                            </p>
-                                                        )} */}
+                                        {preguntas.map((pregunta, index) => {
+                                            // Pregunta SIMPLE (Sí/No)
+                                            if (pregunta.tipo === 'simple') {
+                                                return (
+                                                    <div key={pregunta.id} className="border border-neutral-200 rounded-lg p-4 bg-neutral-50/30">
+                                                        <label className="block text-sm font-semibold text-neutral-800 mb-3">
+                                                            {index + 1}. {pregunta.descripcion}
+                                                        </label>
+                                                        
+                                                        <div className="flex gap-6">
+                                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                                <input
+                                                                    type="radio"
+                                                                    name={`pregunta_${pregunta.id}`}
+                                                                    value="SI"
+                                                                    checked={data.respuestas[pregunta.id] === 'SI'}
+                                                                    onChange={(e) => handleRespuestaSimple(pregunta.id, e.target.value)}
+                                                                    className="w-4 h-4 text-[#1FB7E9] focus:ring-[#1FB7E9]"
+                                                                />
+                                                                <span className="text-sm text-neutral-700">Sí</span>
+                                                            </label>
+                                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                                <input
+                                                                    type="radio"
+                                                                    name={`pregunta_${pregunta.id}`}
+                                                                    value="NO"
+                                                                    checked={data.respuestas[pregunta.id] === 'NO'}
+                                                                    onChange={(e) => handleRespuestaSimple(pregunta.id, e.target.value)}
+                                                                    className="w-4 h-4 text-[#1FB7E9] focus:ring-[#1FB7E9]"
+                                                                />
+                                                                <span className="text-sm text-neutral-700">No</span>
+                                                            </label>
+                                                        </div>
+                                                        
+                                                        {getFieldError(`respuestas.${pregunta.id}`) && (
+                                                            <p className="mt-1 text-xs text-red-600">{getFieldError(`respuestas.${pregunta.id}`)}</p>
+                                                        )}
                                                     </div>
-                                                )}
-                                                
-                                                {getFieldError(`respuestas.${pregunta.id}`) && (
-                                                    <p className="mt-1 text-xs text-red-600">{getFieldError(`respuestas.${pregunta.id}`)}</p>
-                                                )}
-                                            </div>
-                                        ))}
+                                                );
+                                            }
+
+                                            // Pregunta MÚLTIPLE (con opciones)
+                                            const respuestaActual = data.respuestas_multiple[pregunta.id];
+                                            const opcionSeleccionadaId = respuestaActual?.opcion_id;
+                                            
+                                            return (
+                                                <div key={pregunta.id} className="border border-neutral-200 rounded-lg p-4 bg-neutral-50/30">
+                                                    <label className="block text-sm font-semibold text-neutral-800 mb-3">
+                                                        {index + 1}. {pregunta.descripcion}
+                                                    </label>
+                                                    
+                                                    <div className="space-y-2">
+                                                        {pregunta.opciones?.map((opcion) => (
+                                                            <div key={opcion.id} className="space-y-1">
+                                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                                    <input
+                                                                        type="radio"
+                                                                        name={`pregunta_multiple_${pregunta.id}`}
+                                                                        value={opcion.id}
+                                                                        checked={opcionSeleccionadaId === opcion.id}
+                                                                        onChange={() => handleOpcionMultiple(
+                                                                            pregunta.id, 
+                                                                            opcion.id, 
+                                                                            opcion.requiere_especificar,
+                                                                            respuestaActual?.especificacion || ''
+                                                                        )}
+                                                                        className="w-4 h-4 text-[#1FB7E9] focus:ring-[#1FB7E9]"
+                                                                    />
+                                                                    <span className="text-sm text-neutral-700">{opcion.opcion}</span>
+                                                                </label>
+                                                                
+                                                                {opcionSeleccionadaId === opcion.id && opcion.requiere_especificar && (
+                                                                    <div className="ml-6 mt-2">
+                                                                        <input
+                                                                            type="text"
+                                                                            placeholder="Especifique..."
+                                                                            value={respuestaActual?.especificacion || ''}
+                                                                            onChange={(e) => handleEspecificacionMultiple(pregunta.id, opcion.id, e.target.value)}
+                                                                            className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-[#1FB7E9] focus:outline-none focus:ring-1 focus:ring-[#1FB7E9]"
+                                                                        />
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                    
+                                                    {getFieldError(`respuestas_multiple.${pregunta.id}`) && (
+                                                        <p className="mt-1 text-xs text-red-600">{getFieldError(`respuestas_multiple.${pregunta.id}`)}</p>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             )}

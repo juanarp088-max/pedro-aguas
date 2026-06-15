@@ -10,25 +10,32 @@ class Pregunta extends Model
     use HasFactory;
 
     protected $table = 'preguntas';
+    protected $with = ['opciones']; // Esto carga automáticamente las opciones
+
 
     protected $fillable = [
         'descripcion',
         'activa',
+        'tipo',
     ];
 
-    /**
-     * Relación con respuestas
-     */
+    protected $casts = [
+        'activa' => 'boolean',
+    ];
+
     public function respuestas()
     {
         return $this->hasMany(Respuesta::class, 'pregunta_id');
     }
 
-    /**
-     * Relación con catálogos
-     */
     public function catalogos()
     {
         return $this->hasMany(Catalogo::class, 'pregunta_id');
     }
+
+// app/Models/Pregunta.php
+public function opciones()
+{
+    return $this->hasMany(OpcionPregunta::class, 'pregunta_id')->orderBy('orden');
+}
 }

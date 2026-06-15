@@ -24,6 +24,10 @@ Route::post('/login', function (Request $request) {
     ]);
 });
 
+Route::get('/api/preguntas-completas', function () {
+    return \App\Models\Pregunta::with('opciones')->where('activa', true)->get();
+})->name('preguntas.api');
+
 // Rutas protegidas por Sanctum
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/consulta/registro', [RegistroController::class, 'store']);

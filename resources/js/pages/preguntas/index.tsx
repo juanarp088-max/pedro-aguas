@@ -15,6 +15,8 @@ interface Pregunta {
     id: number;
     descripcion: string;
     activa: boolean;
+    tipo: 'simple' | 'multiple';
+    opciones?: any[];
     created_at: string;
     updated_at: string;
 }
@@ -150,6 +152,7 @@ export default function PreguntasIndex() {
                                 <tr>
                                     <th className="px-6 py-4">#</th>
                                     <th className="px-6 py-4">Pregunta</th>
+                                    <th className="px-6 py-4 text-center">Tipo</th> {/* ← COLUMNA TIPO AGREGADA */}
                                     <th className="px-6 py-4 text-center">Estado</th>
                                     <th className="px-6 py-4 text-center">Acciones</th>
                                 </tr>
@@ -157,7 +160,7 @@ export default function PreguntasIndex() {
                             <tbody className="divide-y divide-neutral-100">
                                 {preguntasFiltradas.length === 0 ? (
                                     <tr>
-                                        <td colSpan={4} className="px-6 py-12 text-center text-sm text-neutral-400 italic">
+                                        <td colSpan={5} className="px-6 py-12 text-center text-sm text-neutral-400 italic">
                                             {searchTerm ? 'No se encontraron preguntas con ese criterio' : 'No hay preguntas registradas'}
                                         </td>
                                     </tr>
@@ -169,6 +172,16 @@ export default function PreguntasIndex() {
                                                 <div className="max-w-md whitespace-pre-wrap">
                                                     {pregunta.descripcion}
                                                 </div>
+                                            </td>
+                                            {/* ← CELDA TIPO AGREGADA */}
+                                            <td className="px-6 py-4 text-center">
+                                                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                                    pregunta.tipo === 'simple' 
+                                                        ? 'bg-blue-100 text-blue-800' 
+                                                        : 'bg-purple-100 text-purple-800'
+                                                }`}>
+                                                    {pregunta.tipo === 'simple' ? 'Sí/No' : 'Opciones Múltiples'}
+                                                </span>
                                             </td>
                                             <td className="px-6 py-4 text-center">
                                                 <button
@@ -215,6 +228,8 @@ export default function PreguntasIndex() {
                 {/* Estadísticas */}
                 <div className="flex justify-between items-center text-xs text-neutral-500 bg-neutral-50 px-6 py-3 rounded-lg">
                     <div>Total: <span className="font-semibold text-neutral-700">{preguntas.length}</span> preguntas</div>
+                    <div>Simples: <span className="font-semibold text-blue-700">{preguntas.filter(p => p.tipo === 'simple').length}</span></div>
+                    <div>Múltiples: <span className="font-semibold text-purple-700">{preguntas.filter(p => p.tipo === 'multiple').length}</span></div>
                     <div>Activas: <span className="font-semibold text-green-700">{preguntas.filter(p => p.activa).length}</span></div>
                     <div>Inactivas: <span className="font-semibold text-red-700">{preguntas.filter(p => !p.activa).length}</span></div>
                 </div>

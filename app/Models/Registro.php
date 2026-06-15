@@ -34,6 +34,7 @@ class Registro extends Model
         'papa',
             // 'id_beneficio',
             'id_user',
+            'duplicado',
         ];
 
         public function beneficios(): \Illuminate\Database\Eloquent\Relations\BelongsToMany

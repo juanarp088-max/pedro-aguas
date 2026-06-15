@@ -6,14 +6,12 @@ use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\Registro;
-use App\Models\Beneficio;
 use App\Models\Pregunta;
 use App\Models\Catalogo;
+use App\Models\OpcionPregunta;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Exception;
 use Inertia\Inertia;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 
@@ -40,7 +38,7 @@ class RegistroController extends Controller
             'numint'     => ['nullable', 'numeric', 'min:1'],
             'telefono'   => ['required', 'digits:10'],
             'respuestas' => ['nullable', 'array'],
-            'detalles'   => ['nullable', 'array'],
+            'respuestas_multiple' => ['nullable', 'array'],
         ];
     }
 
@@ -86,7 +84,7 @@ class RegistroController extends Controller
             'Á' => 'A', 'É' => 'E', 'Í' => 'I', 'Ó' => 'O', 'Ú' => 'U',
             'à' => 'a', 'è' => 'e', 'ì' => 'i', 'ò' => 'o', 'ù' => 'u',
             'À' => 'A', 'È' => 'E', 'Ì' => 'I', 'Ò' => 'O', 'Ù' => 'U',
-            'ñ' => 'ñ', 'Ñ' => 'Ñ' // Mantener Ñ
+            'ñ' => 'ñ', 'Ñ' => 'Ñ'
         ];
         
         return strtr($cadena, $mapeo);
@@ -97,7 +95,6 @@ class RegistroController extends Controller
      */
     private function limpiarYPrepararDatos(Request $request)
     {
-        // Limpiar tildes de los campos de texto
         $camposTexto = ['nombre', 'snombre', 'apellido', 'sapellido', 'colonia', 'calle', 'municipio'];
 
         foreach ($camposTexto as $campo) {
@@ -106,7 +103,6 @@ class RegistroController extends Controller
             }
         }
 
-        // Asegurar que el género venga en mayúsculas y sea válido
         if ($request->has('genero') && is_string($request->genero)) {
             $genero = mb_strtoupper(trim($request->genero), 'UTF-8');
             $genero = match($genero) {
@@ -190,9 +186,19 @@ class RegistroController extends Controller
                 $query->where('nombre', 'LIKE', "%{$nombre}%");
             }
 
+            if ($request->filled('snombre')) {
+                $snombre = mb_strtoupper($request->input('snombre'), 'UTF-8');
+                $query->where('snombre', 'LIKE', "%{$snombre}%");
+            }
+
             if ($request->filled('apellido')) {
                 $apellido = mb_strtoupper($request->input('apellido'), 'UTF-8');
                 $query->where('apellido', 'LIKE', "%{$apellido}%");
+            }
+
+            if ($request->filled('sapellido')) {
+                $sapellido = mb_strtoupper($request->input('sapellido'), 'UTF-8');
+                $query->where('sapellido', 'LIKE', "%{$sapellido}%");
             }
 
             if ($request->filled('nacimiento')) {
@@ -200,12 +206,13 @@ class RegistroController extends Controller
             }
 
             $beneficiarios = $query->orderBy('id', 'desc')->get();
-            $preguntas = Pregunta::where('activa', true)->orderBy('id')->get();
+            
+            $preguntas = Pregunta::with('opciones')->where('activa', true)->orderBy('id')->get();
 
             return Inertia::render('consulta', [
                 'beneficiarios' => $beneficiarios,
                 'preguntas'     => $preguntas,
-                'filtros'       => $request->only(['nombre', 'apellido', 'nacimiento'])
+                'filtros'       => $request->only(['nombre', 'snombre', 'apellido', 'sapellido', 'nacimiento'])
             ]);
         } catch (\Exception $e) {
             Log::error('Error en index Registro: ' . $e->getMessage());
@@ -219,7 +226,11 @@ class RegistroController extends Controller
     public function create()
     {
         try {
-            $preguntas = Pregunta::where('activa', true)->get();
+            $preguntas = Pregunta::with('opciones')
+                ->where('activa', true)
+                ->orderBy('id')
+                ->get();
+            
             return Inertia::render('create', ['preguntas' => $preguntas]);
         } catch (\Exception $e) {
             Log::error('Error en create Registro: ' . $e->getMessage());
@@ -228,270 +239,312 @@ class RegistroController extends Controller
     }
 
     /**
-     * Store a newly created resource in storage.
+     * Display the specified resource (para edición).
      */
-    public function store(Request $request)
+    public function show(string $id)
     {
-        $fuerzaBruta = $request->boolean('fuerza_bruta');
-
-        // 1. Limpieza y preparación de datos
-        $request = $this->limpiarYPrepararDatos($request);
-        
-        if ($request->has('telefono')) {
-            $request->merge(['telefono' => str_replace(' ', '', $request->telefono)]);
-        }
-
-        // 2. Validación
-        $datosValidados = $request->validate(
-            $this->getReglasValidacion(),
-            $this->getMensajesPersonalizados()
-        );
-
-        // 3. Extracción de arrays
-        $respuestas = $datosValidados['respuestas'] ?? [];
-        $detalles   = $datosValidados['detalles'] ?? [];
-
-        // 4. Preparación de datos del Registro
-        $datosParaCrear = $datosValidados;
-        unset($datosParaCrear['respuestas'], $datosParaCrear['detalles']);
-
-        if (isset($datosParaCrear['telefono'])) {
-            $datosParaCrear['telefono'] = $this->formatearTelefono($datosParaCrear['telefono']);
-        }
-
-        // 5. Verificación de duplicados
-        if (!$fuerzaBruta) {
-            $duplicados = $this->detectarDuplicados($datosParaCrear);
-            if ($duplicados->isNotEmpty()) {
-                return back()->with([
-                    'advertencia' => 'Ya existen registros similares.',
-                    'coincidencias' => $duplicados
-                ]);
-            }
-        }
-
-        $datosFinales = $this->convertirMayusculas($datosParaCrear);
-        $datosFinales['id_user'] = Auth::id();
-        
-        if (is_null($datosFinales['sapellido'] ?? null)) {
-            $datosFinales['papa'] = true;
-        }
-
-        // 6. Transacción
-        DB::beginTransaction();
-        
         try {
-            $nuevoRegistro = Registro::create($datosFinales);
-
-            if (!empty($respuestas)) {
-                foreach ($respuestas as $preguntaId => $valorRespuesta) {
-                    $valorNormalizado = mb_strtoupper(trim($valorRespuesta), 'UTF-8');
-                    $descripcion = $detalles[$preguntaId] ?? null;
-                    $catalogoId = null;
-
-                    // Validar que el detalle no esté vacío cuando es requerido
-                    if ($descripcion && trim($descripcion) !== '') {
-                        $descripcion = mb_strtoupper(trim($descripcion), 'UTF-8');
-                    } else {
-                        $descripcion = null;
+            $beneficiario = Registro::with(['respuestas.catalogo'])->findOrFail($id);
+            
+            $respuestasFormateadas = [];
+            $respuestasMultipleFormateadas = [];
+            
+            foreach ($beneficiario->respuestas as $respuesta) {
+                $pregunta = Pregunta::with('opciones')->find($respuesta->pregunta_id);
+                
+                if ($pregunta && $pregunta->tipo === 'simple') {
+                    $respuestasFormateadas[$respuesta->pregunta_id] = $respuesta->valor_extra;
+                } 
+                else if ($pregunta && $pregunta->tipo === 'multiple') {
+                    $opcion = $pregunta->opciones->first(function ($op) use ($respuesta) {
+                        return $op->opcion === $respuesta->valor_extra;
+                    });
+                    
+                    if ($opcion) {
+                        $respuestasMultipleFormateadas[$respuesta->pregunta_id] = [
+                            'opcion_id' => $opcion->id,
+                            'especificacion' => $respuesta->detalle ?? ''
+                        ];
                     }
-
-                    // LÓGICA DE CATÁLOGO
-                    if ($preguntaId == 6) {
-                        if ($valorNormalizado === 'NO' && $descripcion) {
-                            $catalogo = Catalogo::firstOrCreate([
-                                'pregunta_id' => $preguntaId,
-                                'nombre'      => $descripcion
-                            ]);
-                            $catalogoId = $catalogo->id;
-                        }
-                    } else {
-                        if ($valorNormalizado === 'SI' && $descripcion) {
-                            $catalogo = Catalogo::firstOrCreate([
-                                'pregunta_id' => $preguntaId,
-                                'nombre'      => $descripcion
-                            ]);
-                            $catalogoId = $catalogo->id;
-                        }
-                    }
-
-                    $nuevoRegistro->respuestas()->create([
-                        'pregunta_id' => (int)$preguntaId,
-                        'catalogo_id' => $catalogoId,
-                        'valor_extra' => $valorNormalizado,
-                        'detalle'     => $descripcion,
-                    ]);
                 }
             }
-
-            DB::commit();
-
-            Log::info('Registro creado exitosamente', [
-                'id' => $nuevoRegistro->id,
-                'usuario' => Auth::id(),
-                'ip' => $request->ip()
+            
+            return response()->json([
+                'success' => true,
+                'beneficiario' => $beneficiario,
+                'respuestas' => $respuestasFormateadas,
+                'respuestas_multiple' => $respuestasMultipleFormateadas
             ]);
-
-            return redirect()->route('dashboard')->with('success', 'Registro completado con éxito!');
             
         } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Error en store Registro', [
-                'error' => $e->getMessage(),
-                'usuario' => Auth::id(),
-                'data' => $datosFinales
-            ]);
-            
-            return back()->withErrors(['error' => 'Error al guardar: ' . $e->getMessage()]);
+            Log::error('Error al obtener beneficiario para editar: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al cargar los datos del beneficiario'
+            ], 500);
         }
     }
 
     /**
-     * Update the specified resource in storage.
+     * Store a newly created resource in storage.
      */
-    public function update(Request $request, string $id)
-    {
-        $fuerzaBruta = $request->boolean('fuerza_bruta');
+public function store(Request $request)
+{
+    $fuerzaBruta = $request->boolean('duplicado');
 
-        // 1. Encontrar el registro
-        $beneficiario = Registro::findOrFail($id);
+    $request = $this->limpiarYPrepararDatos($request);
+    
+    if ($request->has('telefono')) {
+        $request->merge(['telefono' => str_replace(' ', '', $request->telefono)]);
+    }
 
-        // 2. Limpiar tildes de los datos
-        $request = $this->limpiarYPrepararDatos($request);
+    $datosValidados = $request->validate(
+        $this->getReglasValidacion(),
+        $this->getMensajesPersonalizados()
+    );
 
-        if ($request->has('telefono')) {
-            $request->merge(['telefono' => str_replace(' ', '', $request->telefono)]);
-        }
+    $respuestas = $datosValidados['respuestas'] ?? [];
+    $respuestasMultiple = $request->input('respuestas_multiple', []);
 
-        // 3. Validar los datos
-        $datosValidados = $request->validate(
-            $this->getReglasValidacion(),
-            $this->getMensajesPersonalizados()
-        );
+    $datosParaCrear = $datosValidados;
+    unset($datosParaCrear['respuestas'], $datosParaCrear['respuestas_multiple']);
 
-        // 4. Extraer respuestas y detalles
-        $respuestas = $datosValidados['respuestas'] ?? [];
-        $detalles = $datosValidados['detalles'] ?? [];
-        
-        unset($datosValidados['respuestas']);
-        unset($datosValidados['detalles']);
+    if (isset($datosParaCrear['telefono'])) {
+        $datosParaCrear['telefono'] = $this->formatearTelefono($datosParaCrear['telefono']);
+    }
 
-        // 5. Detector de duplicados
-        if (!$fuerzaBruta) {
-            $duplicados = $this->detectarDuplicados($datosValidados, $id);
-            if ($duplicados->isNotEmpty()) {
-                return back()->with([
-                    'advertencia' => '¡Atención! Ya existen personas registradas con datos idénticos.',
-                    'coincidencias' => $duplicados,
-                ]);
-            }
-        }
-
-        // 6. Formatear teléfono
-        if (isset($datosValidados['telefono'])) {
-            $datosValidados['telefono'] = $this->formatearTelefono($datosValidados['telefono']);
-        }
-
-        // 7. Convertir a mayúsculas
-        $datosFinales = $this->convertirMayusculas($datosValidados);
-        
-        if (is_null($datosFinales['sapellido'] ?? null)) {
-            $datosFinales['papa'] = true;
-        }
-        
-        $datosFinales['id_user'] = Auth::id();
-
-        // 8. Actualizar en base de datos
-        DB::beginTransaction();
-
-        try {
-            $beneficiario->update($datosFinales);
-
-            // Actualizar respuestas
-            $beneficiario->respuestas()->delete();
-            
-            if (!empty($respuestas)) {
-                foreach ($respuestas as $preguntaId => $valorRespuesta) {
-                    $valorNormalizado = mb_strtoupper(trim($valorRespuesta), 'UTF-8');
-                    $detalle = $detalles[$preguntaId] ?? null;
-                    $catalogoId = null;
-
-                    if ($detalle && trim($detalle) !== '') {
-                        $detalle = mb_strtoupper(trim($detalle), 'UTF-8');
-                    } else {
-                        $detalle = null;
-                    }
-
-                    // Lógica de catálogo
-                    if ($preguntaId == 6) {
-                        if ($valorNormalizado === 'NO' && $detalle) {
-                            $catalogo = Catalogo::firstOrCreate([
-                                'pregunta_id' => $preguntaId,
-                                'nombre'      => $detalle
-                            ]);
-                            $catalogoId = $catalogo->id;
-                        }
-                    } else {
-                        if ($valorNormalizado === 'SI' && $detalle) {
-                            $catalogo = Catalogo::firstOrCreate([
-                                'pregunta_id' => $preguntaId,
-                                'nombre'      => $detalle
-                            ]);
-                            $catalogoId = $catalogo->id;
-                        }
-                    }
-
-                    $beneficiario->respuestas()->create([
-                        'pregunta_id' => (int)$preguntaId,
-                        'catalogo_id' => $catalogoId,
-                        'valor_extra' => $valorNormalizado,
-                        'detalle'     => $detalle,
-                    ]);
-                }
-            }
-
-            DB::commit();
-
-            Log::info('Registro actualizado con éxito', [
-                'id' => $id,
-                'usuario' => Auth::id(),
-                'ip' => $request->ip()
-            ]);
-
-            if ($request->wantsJson()) {
-                $beneficiarioActualizado = Registro::with(['respuestas.catalogo'])->find($id);
-                
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Registro actualizado con éxito.',
-                    'data' => [
-                        'beneficiario' => $beneficiarioActualizado,
-                        'respuestas' => $beneficiarioActualizado->respuestas
-                    ]
-                ]);
-            }
-
-            return redirect()->back()->with('success', 'Registro actualizado de forma correcta.');
-            
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Error al actualizar registro', [
-                'id' => $id,
-                'error' => $e->getMessage(),
-                'usuario' => Auth::id()
-            ]);
-
-            if ($request->wantsJson()) {
-                return response()->json([
-                    'errors' => ['error' => 'Error al actualizar: ' . $e->getMessage()]
-                ], 500);
-            }
-
-            return redirect()->back()->withErrors([
-                'error' => 'Ocurrió un error interno al procesar la actualización.'
+    // Verificación de duplicados
+    $duplicados = null;
+    if (!$fuerzaBruta) {
+        $duplicados = $this->detectarDuplicados($datosParaCrear);
+        if ($duplicados->isNotEmpty()) {
+            return back()->with([
+                'advertencia' => 'Ya existen registros similares.',
+                'coincidencias' => $duplicados
             ]);
         }
     }
+
+    $datosFinales = $this->convertirMayusculas($datosParaCrear);
+    $datosFinales['id_user'] = Auth::id();
+    $datosFinales['duplicado'] = $fuerzaBruta; // ← GUARDAR SI FUE FORZADO
+    
+    if (is_null($datosFinales['sapellido'] ?? null)) {
+        $datosFinales['papa'] = true;
+    }
+
+    DB::beginTransaction();
+    
+    try {
+        $nuevoRegistro = Registro::create($datosFinales);
+
+        // Procesar preguntas simples
+        foreach ($respuestas as $preguntaId => $valorRespuesta) {
+            $valorNormalizado = mb_strtoupper(trim($valorRespuesta), 'UTF-8');
+            
+            $nuevoRegistro->respuestas()->create([
+                'pregunta_id' => (int)$preguntaId,
+                'catalogo_id' => null,
+                'valor_extra' => $valorNormalizado,
+                'detalle'     => null,
+            ]);
+        }
+
+        // Procesar preguntas múltiples
+        foreach ($respuestasMultiple as $preguntaId => $respuestaData) {
+            $opcionId = $respuestaData['opcion_id'] ?? null;
+            $especificacion = $respuestaData['especificacion'] ?? '';
+            
+            if ($opcionId) {
+                $opcion = OpcionPregunta::with('pregunta')->find($opcionId);
+                
+                if ($opcion) {
+                    $detalleOpcion = $opcion->opcion;
+                    
+                    if ($especificacion && trim($especificacion) !== '') {
+                        $especificacionUpper = mb_strtoupper(trim($especificacion), 'UTF-8');
+                        $detalleOpcion .= ': ' . $especificacionUpper;
+                    }
+                    
+                    $catalogo = Catalogo::firstOrCreate([
+                        'pregunta_id' => $preguntaId,
+                        'nombre'      => $detalleOpcion
+                    ]);
+                    
+                    $nuevoRegistro->respuestas()->create([
+                        'pregunta_id' => (int)$preguntaId,
+                        'catalogo_id' => $catalogo->id,
+                        'valor_extra' => $opcion->opcion,
+                        'detalle'     => $especificacion ? mb_strtoupper(trim($especificacion), 'UTF-8') : null,
+                    ]);
+                }
+            }
+        }
+
+        DB::commit();
+
+        Log::info('Registro creado exitosamente', [
+            'id' => $nuevoRegistro->id,
+            'usuario' => Auth::id(),
+            'fuerza_bruta' => $fuerzaBruta,
+            'ip' => $request->ip()
+        ]);
+
+        // Si fue forzado, redirigir a dashboard con mensaje específico
+        if ($fuerzaBruta) {
+            return redirect()->route('dashboard')->with('success', 'Registro guardado forzosamente (ignorando duplicados).');
+        }
+
+        return redirect()->route('dashboard')->with('success', 'Registro completado con éxito!');
+        
+    } catch (\Exception $e) {
+        DB::rollBack();
+        Log::error('Error en store Registro: ' . $e->getMessage());
+        return back()->withErrors(['error' => 'Error al guardar: ' . $e->getMessage()]);
+    }
+}
+
+    /**
+     * Update the specified resource in storage.
+     */
+public function update(Request $request, string $id)
+{
+    $beneficiario = Registro::findOrFail($id);
+
+    $request = $this->limpiarYPrepararDatos($request);
+
+    if ($request->has('telefono')) {
+        $request->merge(['telefono' => str_replace(' ', '', $request->telefono)]);
+    }
+
+    $datosValidados = $request->validate(
+        $this->getReglasValidacion(),
+        $this->getMensajesPersonalizados()
+    );
+
+    $respuestas = $datosValidados['respuestas'] ?? [];
+    $respuestasMultiple = $request->input('respuestas_multiple', []);
+    
+    unset($datosValidados['respuestas']);
+    unset($datosValidados['respuestas_multiple']);
+
+    // Verificar duplicados ANTES de actualizar
+    $duplicados = $this->detectarDuplicados($datosValidados, $id);
+    if ($duplicados->isNotEmpty()) {
+        // Construir mensaje con los datos del duplicado
+        $primerDuplicado = $duplicados->first();
+        $mensaje = "No se puede actualizar porque ya existe un registro con estos datos:\n\n";
+        $mensaje .= "• Nombre: " . $primerDuplicado->nombre . " " . ($primerDuplicado->snombre ?? '') . "\n";
+        $mensaje .= "• Apellido: " . $primerDuplicado->apellido . " " . ($primerDuplicado->sapellido ?? '') . "\n";
+        $mensaje .= "• Fecha de nacimiento: " . $primerDuplicado->nacimiento . "\n";
+        $mensaje .= "\nID del registro existente: " . $primerDuplicado->id;
+        
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => false,
+                'message' => $mensaje,
+                'duplicados' => $duplicados
+            ], 409);
+        }
+        
+        return back()->withErrors([
+            'duplicado' => $mensaje
+        ])->withInput();
+    }
+
+    if (isset($datosValidados['telefono'])) {
+        $datosValidados['telefono'] = $this->formatearTelefono($datosValidados['telefono']);
+    }
+
+    $datosFinales = $this->convertirMayusculas($datosValidados);
+    
+    if (is_null($datosFinales['sapellido'] ?? null)) {
+        $datosFinales['papa'] = true;
+    }
+    
+    $datosFinales['id_user'] = Auth::id();
+
+    DB::beginTransaction();
+
+    try {
+        $beneficiario->update($datosFinales);
+        $beneficiario->respuestas()->delete();
+        
+        // Procesar preguntas simples
+        foreach ($respuestas as $preguntaId => $valorRespuesta) {
+            $valorNormalizado = mb_strtoupper(trim($valorRespuesta), 'UTF-8');
+            
+            $beneficiario->respuestas()->create([
+                'pregunta_id' => (int)$preguntaId,
+                'catalogo_id' => null,
+                'valor_extra' => $valorNormalizado,
+                'detalle'     => null,
+            ]);
+        }
+
+        // Procesar preguntas múltiples
+        foreach ($respuestasMultiple as $preguntaId => $respuestaData) {
+            $opcionId = $respuestaData['opcion_id'] ?? null;
+            $especificacion = $respuestaData['especificacion'] ?? '';
+            
+            if ($opcionId) {
+                $opcion = OpcionPregunta::with('pregunta')->find($opcionId);
+                
+                if ($opcion) {
+                    $detalleOpcion = $opcion->opcion;
+                    
+                    if ($especificacion && trim($especificacion) !== '') {
+                        $especificacionUpper = mb_strtoupper(trim($especificacion), 'UTF-8');
+                        $detalleOpcion .= ': ' . $especificacionUpper;
+                    }
+                    
+                    $catalogo = Catalogo::firstOrCreate([
+                        'pregunta_id' => $preguntaId,
+                        'nombre'      => $detalleOpcion
+                    ]);
+                    
+                    $beneficiario->respuestas()->create([
+                        'pregunta_id' => (int)$preguntaId,
+                        'catalogo_id' => $catalogo->id,
+                        'valor_extra' => $opcion->opcion,
+                        'detalle'     => $especificacion ? mb_strtoupper(trim($especificacion), 'UTF-8') : null,
+                    ]);
+                }
+            }
+        }
+
+        DB::commit();
+
+        Log::info('Registro actualizado con éxito', [
+            'id' => $id,
+            'usuario' => Auth::id(),
+            'ip' => $request->ip()
+        ]);
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Registro actualizado con éxito.'
+            ]);
+        }
+
+        return redirect()->back()->with('success', 'Registro actualizado de forma correcta.');
+        
+    } catch (\Exception $e) {
+        DB::rollBack();
+        Log::error('Error al actualizar registro: ' . $e->getMessage());
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'errors' => ['error' => 'Error al actualizar: ' . $e->getMessage()]
+            ], 500);
+        }
+
+        return redirect()->back()->withErrors([
+            'error' => 'Ocurrió un error interno al procesar la actualización.'
+        ]);
+    }
+}
 
     /**
      * Remove the specified resource from storage.
@@ -503,13 +556,8 @@ class RegistroController extends Controller
         DB::beginTransaction();
 
         try {
-            // Eliminar respuestas primero
             $beneficiario->respuestas()->delete();
-            
-            // Eliminar relaciones con beneficios si existen
             $beneficiario->beneficios()->detach();
-            
-            // Eliminar el registro
             $beneficiario->delete();
 
             DB::commit();
@@ -523,11 +571,7 @@ class RegistroController extends Controller
             
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Error al eliminar registro', [
-                'id' => $id,
-                'error' => $e->getMessage(),
-                'usuario' => Auth::id()
-            ]);
+            Log::error('Error al eliminar registro: ' . $e->getMessage());
 
             return redirect()->back()->withErrors([
                 'error' => 'No se pudo eliminar el registro: ' . $e->getMessage()

@@ -1,8 +1,7 @@
 import InputField from '@/components/input-field';
-import PreguntaInput from '@/components/PreguntaInput';
 import GenderSelector from '@/components/sexo';
 import AppLayout from '@/layouts/app-layout';
-import { Head, useForm, usePage } from '@inertiajs/react';
+import { Head, useForm, usePage, router } from '@inertiajs/react';
 import axios from 'axios';
 import { FormEvent, useEffect, useState } from 'react';
 import Swal from 'sweetalert2';
@@ -28,6 +27,22 @@ interface SugerenciaCalle {
     nombre: string;
 }
 
+interface Opcion {
+    id: number;
+    opcion: string;
+    valor: string;
+    requiere_especificar: boolean;
+    orden: number;
+}
+
+interface Pregunta {
+    id: number;
+    descripcion: string;
+    activa: boolean;
+    tipo: 'simple' | 'multiple';
+    opciones?: Opcion[];
+}
+
 declare const route: any;
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -39,8 +54,10 @@ export default function Create() {
     const { props } = usePage<any>();
     const advertencia = props.flash?.advertencia;
     const coincidencias = props.flash?.coincidencias;
+    const preguntas: Pregunta[] = props.preguntas || [];
 
-    const { data, setData, post, processing, errors, reset, setErrors } = useForm({
+    // ✅ CORRECCIÓN: Usar 'any' para evitar problemas de tipo
+    const { data, setData, processing, errors, reset } = useForm<any>({
         nombre: '',
         snombre: '',
         apellido: '',
@@ -56,13 +73,12 @@ export default function Create() {
         edad: '',
         tarjeta: '',
         genero: '',
-        respuestas: {} as Record<number, string>,
-        detalles: {} as Record<number, string>,
+        respuestas: {},
+        respuestas_multiple: {},
     });
 
     const [sugerenciasColonias, setSugerenciasColonias] = useState<SugerenciaColonia[]>([]);
     const [mostrarColonias, setMostrarColonias] = useState(false);
-
     const [sugerenciasCalles, setSugerenciasCalles] = useState<SugerenciaCalle[]>([]);
     const [mostrarCalles, setMostrarCalles] = useState(false);
 
@@ -113,11 +129,8 @@ export default function Create() {
     }, [data.calle]);
 
     const seleccionarColonia = (nombreColonia: string, nombreMunicipio: string) => {
-        setData((prev) => ({
-            ...prev,
-            colonia: nombreColonia,
-            municipio: nombreMunicipio,
-        }));
+        setData('colonia', nombreColonia);
+        setData('municipio', nombreMunicipio);
         setMostrarColonias(false);
     };
 
@@ -128,29 +141,58 @@ export default function Create() {
 
     const lanzarAlertaExito = async () => {
         await MySwal.fire({
-            title: <p className="text-xl font-bold text-neutral-800">¡Registro Exitoso!</p>,
-            html: <span className="text-sm text-neutral-600">El beneficiario se ha guardado correctamente en el sistema.</span>,
+            title: '¡Registro Exitoso!',
+            html: 'El beneficiario se ha guardado correctamente en el sistema.',
             icon: 'success',
             confirmButtonText: 'Entendido',
             confirmButtonColor: '#1FB7E9',
-            customClass: {
-                popup: 'rounded-xl shadow-lg border border-neutral-100',
-            },
         });
     };
 
     const handleSubmit = (e: FormEvent) => {
         e.preventDefault();
-        post(route('consulta.store'), {
+        
+        const submitData = {
+            nombre: data.nombre,
+            snombre: data.snombre,
+            apellido: data.apellido,
+            sapellido: data.sapellido,
+            colonia: data.colonia,
+            telefono: data.telefono.replace(/\s/g, ''),
+            calle: data.calle,
+            numint: data.numint,
+            numext: data.numext,
+            municipio: data.municipio,
+            cp: data.cp,
+            nacimiento: data.nacimiento,
+            edad: data.edad,
+            tarjeta: data.tarjeta,
+            genero: data.genero,
+            respuestas: data.respuestas,
+            respuestas_multiple: data.respuestas_multiple,
+        };
+        
+        router.post(route('consulta.store'), submitData, {
             preserveState: true,
             preserveScroll: true,
-            onSuccess: (page) => {
+            onSuccess: async (page: any) => {
                 if (!page.props.flash?.advertencia) {
-                    lanzarAlertaExito().then(() => {
-                        reset();
-                    });
+                    await lanzarAlertaExito();
+                    reset();
                 }
             },
+            onError: (errors: any) => {
+                console.error('Errores:', errors);
+                const firstError = Object.values(errors)[0];
+                const errorMessage = Array.isArray(firstError) ? firstError[0] : firstError;
+                
+                MySwal.fire({
+                    title: 'Error de validación',
+                    text: String(errorMessage) || 'Ocurrió un error al guardar el registro',
+                    icon: 'error',
+                    confirmButtonColor: '#EF4444'
+                });
+            }
         });
     };
 
@@ -161,30 +203,78 @@ export default function Create() {
         return `${numbers.slice(0, 3)} ${numbers.slice(3, 6)} ${numbers.slice(6, 10)}`;
     };
 
-    const handleConfirmarForzado = async () => {
-        try {
-            const response = await axios.post(route('consulta.store'), {
-                ...data,
-                fuerza_bruta: true,
+const handleConfirmarForzado = () => {
+    const submitData = {
+        nombre: data.nombre,
+        snombre: data.snombre,
+        apellido: data.apellido,
+        sapellido: data.sapellido,
+        colonia: data.colonia,
+        telefono: data.telefono.replace(/\s/g, ''),
+        calle: data.calle,
+        numint: data.numint,
+        numext: data.numext,
+        municipio: data.municipio,
+        cp: data.cp,
+        nacimiento: data.nacimiento,
+        edad: data.edad,
+        tarjeta: data.tarjeta,
+        genero: data.genero,
+        respuestas: data.respuestas,
+        respuestas_multiple: data.respuestas_multiple,
+        duplicado: true,
+    };
+    
+    router.post(route('consulta.store'), submitData, {
+        preserveState: true,
+        preserveScroll: true,
+        onSuccess: async (page: any) => {
+            await lanzarAlertaExito();
+            reset();
+            window.location.href = route('dashboard');
+        },
+        onError: (errors: any) => {
+            console.error('Errores:', errors);
+            const firstError = Object.values(errors)[0];
+            const errorMessage = Array.isArray(firstError) ? firstError[0] : firstError;
+            
+            MySwal.fire({
+                title: 'Error de validación',
+                text: String(errorMessage) || 'Ocurrió un error al guardar el registro',
+                icon: 'error',
+                confirmButtonColor: '#EF4444'
             });
-
-            if (response.data.success) {
-                await lanzarAlertaExito();
-                reset();
-                window.location.href = response.data.redirect;
-            }
-        } catch (error: any) {
-            if (error.response && error.response.status === 422) {
-                setErrors(error.response.data.errors);
-            } else {
-                MySwal.fire({
-                    title: 'Error',
-                    text: 'Ocurrió un problema al procesar la inserción.',
-                    icon: 'error',
-                    confirmButtonColor: '#DC2626',
-                });
-            }
         }
+    });
+};
+
+    // Manejadores para preguntas simples
+    const handleRespuestaSimple = (preguntaId: number, valor: string) => {
+        setData('respuestas', {
+            ...data.respuestas,
+            [preguntaId]: valor
+        });
+    };
+
+    // Manejadores para preguntas múltiples
+    const handleOpcionMultiple = (preguntaId: number, opcionId: number, requiereEspecificar: boolean, especificacionActual: string) => {
+        setData('respuestas_multiple', {
+            ...data.respuestas_multiple,
+            [preguntaId]: {
+                opcion_id: opcionId,
+                especificacion: requiereEspecificar ? especificacionActual : ''
+            }
+        });
+    };
+
+    const handleEspecificacionMultiple = (preguntaId: number, opcionId: number, valor: string) => {
+        setData('respuestas_multiple', {
+            ...data.respuestas_multiple,
+            [preguntaId]: {
+                opcion_id: opcionId,
+                especificacion: valor
+            }
+        });
     };
 
     return (
@@ -200,9 +290,9 @@ export default function Create() {
                     </div>
 
                     <div className="p-8">
-                        {errors.error && (
+                        {(errors as any).error && (
                             <div className="mb-6 rounded-lg border border-red-200 bg-red-50 p-4">
-                                <p className="text-sm font-medium text-red-800">{errors.error}</p>
+                                <p className="text-sm font-medium text-red-800">{(errors as any).error}</p>
                             </div>
                         )}
 
@@ -273,7 +363,7 @@ export default function Create() {
                                         type="text"
                                         value={data.nombre}
                                         onChange={(e) => setData('nombre', e.target.value)}
-                                        error={errors.nombre}
+                                        error={errors.nombre as string}
                                         placeholder="Primer Nombre"
                                         required
                                     />
@@ -283,7 +373,7 @@ export default function Create() {
                                         type="text"
                                         value={data.snombre}
                                         onChange={(e) => setData('snombre', e.target.value)}
-                                        error={errors.snombre}
+                                        error={errors.snombre as string}
                                         placeholder="Segundo Nombre"
                                     />
                                     <InputField
@@ -292,7 +382,7 @@ export default function Create() {
                                         type="text"
                                         value={data.apellido}
                                         onChange={(e) => setData('apellido', e.target.value)}
-                                        error={errors.apellido}
+                                        error={errors.apellido as string}
                                         placeholder="Primer Apellido"
                                         required
                                     />
@@ -302,7 +392,7 @@ export default function Create() {
                                         type="text"
                                         value={data.sapellido}
                                         onChange={(e) => setData('sapellido', e.target.value)}
-                                        error={errors.sapellido}
+                                        error={errors.sapellido as string}
                                         placeholder="Segundo Apellido"
                                     />
                                 </div>
@@ -319,7 +409,7 @@ export default function Create() {
                                             type="text"
                                             value={data.colonia}
                                             onChange={(e) => setData('colonia', e.target.value)}
-                                            error={errors.colonia}
+                                            error={errors.colonia as string}
                                             placeholder="Escribe para buscar..."
                                             required
                                             autoComplete="off"
@@ -352,7 +442,7 @@ export default function Create() {
                                             type="text"
                                             value={data.calle}
                                             onChange={(e) => setData('calle', e.target.value)}
-                                            error={errors.calle}
+                                            error={errors.calle as string}
                                             placeholder="Escribe para buscar..."
                                             required
                                             autoComplete="off"
@@ -378,7 +468,7 @@ export default function Create() {
                                         type="text"
                                         value={data.numext}
                                         onChange={(e) => setData('numext', e.target.value)}
-                                        error={errors.numext}
+                                        error={errors.numext as string}
                                         placeholder="XXXX"
                                     />
                                     <InputField
@@ -387,7 +477,7 @@ export default function Create() {
                                         type="text"
                                         value={data.numint}
                                         onChange={(e) => setData('numint', e.target.value)}
-                                        error={errors.numint}
+                                        error={errors.numint as string}
                                         placeholder="XXXX"
                                     />
                                 </div>
@@ -403,7 +493,7 @@ export default function Create() {
                                         type="text"
                                         value={data.cp}
                                         onChange={(e) => setData('cp', e.target.value)}
-                                        error={errors.cp}
+                                        error={errors.cp as string}
                                         placeholder="XXXXX"
                                     />
                                     <InputField
@@ -412,7 +502,7 @@ export default function Create() {
                                         type="date"
                                         value={data.nacimiento}
                                         onChange={(e) => setData('nacimiento', e.target.value)}
-                                        error={errors.nacimiento}
+                                        error={errors.nacimiento as string}
                                     />
                                     <InputField
                                         label="Teléfono"
@@ -423,10 +513,10 @@ export default function Create() {
                                             const formatted = formatPhoneNumber(e.target.value);
                                             setData('telefono', formatted);
                                         }}
-                                        error={errors.telefono}
+                                        error={errors.telefono as string}
                                         placeholder="123 456 7890"
                                     />
-                                    <GenderSelector value={data.genero} onChange={(val) => setData('genero', val)} error={errors.genero} />
+                                    <GenderSelector value={data.genero} onChange={(val) => setData('genero', val)} error={errors.genero as string} />
                                 </div>
                             </div>
 
@@ -439,22 +529,101 @@ export default function Create() {
                                         type="number"
                                         value={data.edad}
                                         onChange={(e) => setData('edad', e.target.value)}
-                                        error={errors.edad}
+                                        error={errors.edad as string}
                                         placeholder="Edad"
                                     />
                                 </div>
                             </div>
 
                             {/* Preguntas de Evaluación */}
-                            {props.preguntas && props.preguntas.length > 0 && (
+                            {preguntas.length > 0 && (
                                 <div>
                                     <h3 className="text-base font-bold text-neutral-800 mb-4 pb-2 border-b border-neutral-200">
-                                        Evaluación Social - {props.preguntas.length} Preguntas
+                                        Evaluación Social - {preguntas.length} Preguntas
                                     </h3>
                                     <div className="grid grid-cols-1 gap-5 md:grid-cols-2 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                                        {props.preguntas.map((pregunta: any) => (
-                                            <PreguntaInput key={pregunta.id} pregunta={pregunta} data={data} setData={setData} />
-                                        ))}
+                                        {preguntas.map((pregunta) => {
+                                            if (pregunta.tipo === 'simple') {
+                                                return (
+                                                    <div key={pregunta.id} className="border border-neutral-200 rounded-lg p-4 bg-neutral-50/30">
+                                                        <label className="block text-sm font-semibold text-neutral-800 mb-3">
+                                                            {pregunta.descripcion}
+                                                        </label>
+                                                        
+                                                        <div className="flex gap-6">
+                                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                                <input
+                                                                    type="radio"
+                                                                    name={`pregunta_${pregunta.id}`}
+                                                                    value="SI"
+                                                                    checked={data.respuestas[pregunta.id] === 'SI'}
+                                                                    onChange={(e) => handleRespuestaSimple(pregunta.id, e.target.value)}
+                                                                    className="w-4 h-4 text-[#1FB7E9] focus:ring-[#1FB7E9]"
+                                                                />
+                                                                <span className="text-sm text-neutral-700">Sí</span>
+                                                            </label>
+                                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                                <input
+                                                                    type="radio"
+                                                                    name={`pregunta_${pregunta.id}`}
+                                                                    value="NO"
+                                                                    checked={data.respuestas[pregunta.id] === 'NO'}
+                                                                    onChange={(e) => handleRespuestaSimple(pregunta.id, e.target.value)}
+                                                                    className="w-4 h-4 text-[#1FB7E9] focus:ring-[#1FB7E9]"
+                                                                />
+                                                                <span className="text-sm text-neutral-700">No</span>
+                                                            </label>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+
+                                            const respuestaActual = data.respuestas_multiple[pregunta.id];
+                                            const opcionSeleccionadaId = respuestaActual?.opcion_id;
+                                            
+                                            return (
+                                                <div key={pregunta.id} className="border border-neutral-200 rounded-lg p-4 bg-neutral-50/30">
+                                                    <label className="block text-sm font-semibold text-neutral-800 mb-3">
+                                                        {pregunta.descripcion}
+                                                    </label>
+                                                    
+                                                    <div className="space-y-2">
+                                                        {pregunta.opciones?.map((opcion) => (
+                                                            <div key={opcion.id} className="space-y-1">
+                                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                                    <input
+                                                                        type="radio"
+                                                                        name={`pregunta_multiple_${pregunta.id}`}
+                                                                        value={opcion.id}
+                                                                        checked={opcionSeleccionadaId === opcion.id}
+                                                                        onChange={() => handleOpcionMultiple(
+                                                                            pregunta.id, 
+                                                                            opcion.id, 
+                                                                            opcion.requiere_especificar,
+                                                                            respuestaActual?.especificacion || ''
+                                                                        )}
+                                                                        className="w-4 h-4 text-[#1FB7E9] focus:ring-[#1FB7E9]"
+                                                                    />
+                                                                    <span className="text-sm text-neutral-700">{opcion.opcion}</span>
+                                                                </label>
+                                                                
+                                                                {opcionSeleccionadaId === opcion.id && opcion.requiere_especificar && (
+                                                                    <div className="ml-6 mt-2">
+                                                                        <input
+                                                                            type="text"
+                                                                            placeholder="Especifique..."
+                                                                            value={respuestaActual?.especificacion || ''}
+                                                                            onChange={(e) => handleEspecificacionMultiple(pregunta.id, opcion.id, e.target.value)}
+                                                                            className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-[#1FB7E9] focus:outline-none focus:ring-1 focus:ring-[#1FB7E9]"
+                                                                        />
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             )}
@@ -470,8 +639,8 @@ export default function Create() {
                                 </button>
                                 <button
                                     type="submit"
-                                    className="rounded-lg bg-[#1FB7E9] px-8 py-2.5 text-sm font-bold text-white shadow-md hover:bg-[#1699c2] hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02]"
                                     disabled={processing}
+                                    className="rounded-lg bg-[#1FB7E9] px-8 py-2.5 text-sm font-bold text-white shadow-md hover:bg-[#1699c2] hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02]"
                                 >
                                     {processing ? (
                                         <span className="flex items-center gap-2">
@@ -491,7 +660,7 @@ export default function Create() {
                 </div>
             </div>
 
-            <style jsx>{`
+            <style>{`
                 .custom-scrollbar::-webkit-scrollbar {
                     width: 8px;
                 }

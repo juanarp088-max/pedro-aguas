@@ -4,29 +4,29 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Pregunta;
+use App\Models\OpcionPregunta;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Auth;  // ← Importante
+
 
 class PreguntaController extends Controller
 {
     /**
      * Reglas de validación
      */
-    private function getReglasValidacion($id = null)
+    protected function getReglasValidacion()
     {
         return [
-            'descripcion' => [
-                'required',
-                'string',
-                'max:500',
-                'min:5',
-                // Regex más permisiva y segura
-                'regex:/^[\p{L}\p{N}\s\?¿¡!.,;:()-]+$/u',
-            ],
+            'descripcion' => 'required|string|max:500',
+            'tipo' => 'required|in:simple,multiple',
             'activa' => 'boolean',
+            'opciones' => 'required_if:tipo,multiple|array',
+            'opciones.*.opcion' => 'required_if:tipo,multiple|string|max:255',
+            'opciones.*.requiere_especificar' => 'boolean',
         ];
     }
 
@@ -40,8 +40,11 @@ class PreguntaController extends Controller
             'descripcion.string' => 'La pregunta debe ser texto válido.',
             'descripcion.max' => 'La pregunta no puede exceder los 500 caracteres.',
             'descripcion.min' => 'La pregunta debe tener al menos 5 caracteres.',
-            'descripcion.regex' => 'La pregunta contiene caracteres no permitidos. Use solo letras, números, espacios y signos de puntuación básicos.',
             'activa.boolean' => 'El estado debe ser activo o inactivo.',
+            'tipo.required' => 'Debe seleccionar el tipo de pregunta.',
+            'tipo.in' => 'El tipo de pregunta no es válido.',
+            'opciones.required_if' => 'Debe agregar al menos una opción para preguntas compuestas.',
+            'opciones.*.opcion.required_if' => 'Todas las opciones deben tener un texto.',
         ];
     }
 
@@ -50,18 +53,10 @@ class PreguntaController extends Controller
      */
     private function formatearPregunta($descripcion)
     {
-        // Limpiar espacios múltiples y trim
         $descripcion = preg_replace('/\s+/', ' ', trim($descripcion));
-        
-        // Convertir a mayúsculas
         $descripcion = mb_strtoupper($descripcion, 'UTF-8');
-        
-        // Eliminar signos de interrogación existentes para evitar duplicados
         $descripcion = str_replace(['?', '¿'], '', $descripcion);
-        
-        // Agregar signos de interrogación correctamente
         $descripcion = '¿' . trim($descripcion) . '?';
-        
         return $descripcion;
     }
 
@@ -71,7 +66,7 @@ class PreguntaController extends Controller
     public function index()
     {
         try {
-            $preguntas = Pregunta::orderBy('id', 'asc')->get();
+            $preguntas = Pregunta::with('opciones')->orderBy('id', 'asc')->get();
 
             return Inertia::render('preguntas/index', [
                 'preguntas' => $preguntas
@@ -95,7 +90,6 @@ class PreguntaController extends Controller
      */
     public function store(Request $request)
     {
-        // Validación
         $validated = $request->validate(
             $this->getReglasValidacion(),
             $this->getMensajesPersonalizados()
@@ -104,10 +98,8 @@ class PreguntaController extends Controller
         DB::beginTransaction();
         
         try {
-            // Formatear la pregunta
             $descripcionFormateada = $this->formatearPregunta($validated['descripcion']);
             
-            // Verificar si ya existe una pregunta similar (opcional)
             $existente = Pregunta::where('descripcion', $descripcionFormateada)->first();
             if ($existente) {
                 DB::rollBack();
@@ -119,13 +111,28 @@ class PreguntaController extends Controller
             $pregunta = Pregunta::create([
                 'descripcion' => $descripcionFormateada,
                 'activa' => $validated['activa'] ?? true,
+                'tipo' => $validated['tipo'],
             ]);
+
+            // Si es pregunta compuesta, guardar opciones
+            if ($validated['tipo'] === 'multiple' && !empty($validated['opciones'])) {
+                foreach ($validated['opciones'] as $index => $opcion) {
+                    OpcionPregunta::create([
+                        'pregunta_id' => $pregunta->id,
+                        'opcion' => mb_strtoupper(trim($opcion['opcion']), 'UTF-8'),
+                        'valor' => chr(97 + $index),
+                        'requiere_especificar' => $opcion['requiere_especificar'] ?? false,
+                        'orden' => $index + 1,
+                    ]);
+                }
+            }
 
             DB::commit();
 
             Log::info('Pregunta creada exitosamente', [
                 'id' => $pregunta->id,
-                'usuario' => auth()->id(),
+                'tipo' => $pregunta->tipo,
+                'usuario' =>  Auth::id(),
                 'ip' => $request->ip()
             ]);
 
@@ -136,8 +143,7 @@ class PreguntaController extends Controller
             DB::rollBack();
             Log::error('Error al crear pregunta', [
                 'error' => $e->getMessage(),
-                'data' => $validated,
-                'usuario' => auth()->id()
+                'usuario' =>  Auth::id()
             ]);
             
             return back()->withErrors(['error' => 'Error al crear la pregunta: ' . $e->getMessage()])
@@ -151,7 +157,7 @@ class PreguntaController extends Controller
     public function edit($id)
     {
         try {
-            $pregunta = Pregunta::findOrFail($id);
+            $pregunta = Pregunta::with('opciones')->findOrFail($id);
             return Inertia::render('preguntas/edit', [
                 'pregunta' => $pregunta
             ]);
@@ -170,9 +176,8 @@ class PreguntaController extends Controller
      */
     public function update(Request $request, $id)
     {
-        // Validación
         $validated = $request->validate(
-            $this->getReglasValidacion($id),
+            $this->getReglasValidacion(),
             $this->getMensajesPersonalizados()
         );
 
@@ -180,11 +185,8 @@ class PreguntaController extends Controller
         
         try {
             $pregunta = Pregunta::findOrFail($id);
-            
-            // Formatear la pregunta
             $descripcionFormateada = $this->formatearPregunta($validated['descripcion']);
             
-            // Verificar si ya existe otra pregunta con el mismo texto
             $existente = Pregunta::where('descripcion', $descripcionFormateada)
                 ->where('id', '!=', $id)
                 ->first();
@@ -199,13 +201,31 @@ class PreguntaController extends Controller
             $pregunta->update([
                 'descripcion' => $descripcionFormateada,
                 'activa' => $validated['activa'],
+                'tipo' => $validated['tipo'],
             ]);
+
+            // Eliminar opciones anteriores
+            $pregunta->opciones()->delete();
+
+            // Si es pregunta compuesta, guardar nuevas opciones
+            if ($validated['tipo'] === 'multiple' && !empty($validated['opciones'])) {
+                foreach ($validated['opciones'] as $index => $opcion) {
+                    OpcionPregunta::create([
+                        'pregunta_id' => $pregunta->id,
+                        'opcion' => mb_strtoupper(trim($opcion['opcion']), 'UTF-8'),
+                        'valor' => chr(97 + $index),
+                        'requiere_especificar' => $opcion['requiere_especificar'] ?? false,
+                        'orden' => $index + 1,
+                    ]);
+                }
+            }
 
             DB::commit();
 
             Log::info('Pregunta actualizada exitosamente', [
                 'id' => $pregunta->id,
-                'usuario' => auth()->id(),
+                'tipo' => $pregunta->tipo,
+                'usuario' =>  Auth::id(),
                 'ip' => $request->ip()
             ]);
 
@@ -217,8 +237,7 @@ class PreguntaController extends Controller
             Log::error('Error al actualizar pregunta', [
                 'id' => $id,
                 'error' => $e->getMessage(),
-                'data' => $validated,
-                'usuario' => auth()->id()
+                'usuario' =>  Auth::id()
             ]);
             
             return back()->withErrors(['error' => 'Error al actualizar la pregunta: ' . $e->getMessage()])
@@ -243,7 +262,7 @@ class PreguntaController extends Controller
             Log::info('Estado de pregunta cambiado', [
                 'id' => $pregunta->id,
                 'nuevo_estado' => $pregunta->activa ? 'activa' : 'inactiva',
-                'usuario' => auth()->id()
+                'usuario' =>  Auth::id()
             ]);
 
             return response()->json([
@@ -257,7 +276,7 @@ class PreguntaController extends Controller
             Log::error('Error al cambiar estado de pregunta', [
                 'id' => $id,
                 'error' => $e->getMessage(),
-                'usuario' => auth()->id()
+                'usuario' =>  Auth::id()
             ]);
             
             return response()->json([
@@ -284,7 +303,7 @@ class PreguntaController extends Controller
                 Log::warning('Intento de eliminar pregunta con respuestas asociadas', [
                     'id' => $id,
                     'respuestas_count' => $respuestasCount,
-                    'usuario' => auth()->id()
+                    'usuario' =>  Auth::id()
                 ]);
                 
                 return back()->withErrors([
@@ -292,6 +311,9 @@ class PreguntaController extends Controller
                 ]);
             }
 
+            // Eliminar opciones
+            $pregunta->opciones()->delete();
+            
             $descripcion = $pregunta->descripcion;
             $pregunta->delete();
 
@@ -300,7 +322,7 @@ class PreguntaController extends Controller
             Log::info('Pregunta eliminada exitosamente', [
                 'id' => $id,
                 'descripcion' => $descripcion,
-                'usuario' => auth()->id()
+                'usuario' =>  Auth::id()
             ]);
 
             return redirect()->route('preguntas.index')
@@ -311,7 +333,7 @@ class PreguntaController extends Controller
             Log::error('Error al eliminar pregunta', [
                 'id' => $id,
                 'error' => $e->getMessage(),
-                'usuario' => auth()->id()
+                'usuario' =>  Auth::id()
             ]);
             
             return back()->withErrors(['error' => 'Error al eliminar la pregunta: ' . $e->getMessage()]);

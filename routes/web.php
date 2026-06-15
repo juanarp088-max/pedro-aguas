@@ -6,7 +6,7 @@ use App\Http\Controllers\RegistroController;
 use App\Http\Controllers\ColoniaController;
 use App\Http\Controllers\Admin\UserController; 
 use App\Http\Controllers\BeneficioController;
-use App\Http\Controllers\Admin\PreguntaController; // ← RUTA CORREGIDA
+use App\Http\Controllers\Admin\PreguntaController;
 use App\Models\Registro;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Artisan;
@@ -44,6 +44,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('consulta/buscar', [RegistroController::class, 'index'])->name('consulta.index');
         Route::get('api/colonias/buscar', [ColoniaController::class, 'buscar'])->name('api.colonias.buscar');
         Route::get('api/calles/buscar', [ColoniaController::class, 'buscarCalle'])->name('api.calles.buscar');
+        
         Route::get('api/beneficiarios/{id}/beneficios', function ($id) {
             return Registro::findOrFail($id)->beneficios()->pluck('beneficios.id');
         })->name('api.beneficiarios.beneficios');
@@ -52,6 +53,9 @@ Route::middleware(['auth'])->group(function () {
             $beneficiario = Registro::with(['respuestas.catalogo'])->findOrFail($id);
             return response()->json($beneficiario->respuestas);
         })->name('api.beneficiarios.respuestas');
+
+        // ✅ NUEVA RUTA AGREGADA: Para obtener datos completos del beneficiario (edición)
+        Route::get('api/beneficiarios/{id}/completo', [RegistroController::class, 'show'])->name('api.beneficiarios.completo');
     });
 
     // 2. RUTAS DE CREACIÓN Y EDICIÓN
@@ -69,7 +73,7 @@ Route::middleware(['auth'])->group(function () {
         Route::resource('/admin/beneficio', BeneficioController::class)->names('admin.beneficios');
     });
 
-    // 4. RUTAS DE PREGUNTAS (Estructura: /preguntas)
+    // 4. RUTAS DE PREGUNTAS
     Route::middleware(['role:admin'])->prefix('preguntas')->name('preguntas.')->group(function () {
         Route::get('/', [PreguntaController::class, 'index'])->name('index');
         Route::get('/create', [PreguntaController::class, 'create'])->name('create');
