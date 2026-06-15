@@ -122,8 +122,8 @@ export default function ConsultaDinamica() {
         municipio: '', 
         cp: '', 
         nacimiento: '',
-        edad: '', 
-        tarjeta: '', 
+        edad: '',
+        tarjeta_soluciones: '',
         genero: '',
         respuestas: {} as Record<number, string>,
         respuestas_multiple: {} as Record<number, { opcion_id: number; especificacion: string }>,
@@ -176,7 +176,7 @@ export default function ConsultaDinamica() {
                 cp: proxyB.cp || '',
                 nacimiento: proxyB.nacimiento || '',
                 edad: proxyB.edad || '',
-                tarjeta: proxyB.tarjeta || '',
+                tarjeta_soluciones: proxyB.tarjeta_soluciones || '',
                 genero: proxyB.genero || '',
                 respuestas: dataCompleta.respuestas || {},
                 respuestas_multiple: dataCompleta.respuestas_multiple || {},
@@ -280,11 +280,9 @@ export default function ConsultaDinamica() {
             onError: (errors) => {
                 console.error("Errores del servidor:", errors);
                 
-                // Mostrar error de duplicado de forma clara
                 if (errors && errors.duplicado) {
                     MySwal.fire({
                         title: 'Ya existe un usuario registrado con estos datos',
-                        //text: errors.duplicado,
                         icon: 'warning',
                         confirmButtonColor: '#EF4444'
                     });
@@ -298,7 +296,6 @@ export default function ConsultaDinamica() {
                         errorElement.focus();
                     }
                     
-                    // Mostrar el primer error
                     const firstError = errors[firstErrorField];
                     const errorMessage = Array.isArray(firstError) ? firstError[0] : firstError;
                     MySwal.fire({
@@ -458,13 +455,14 @@ export default function ConsultaDinamica() {
                                         <th className="p-3">Beneficiario</th>
                                         <th className="p-3">F. Nacimiento</th>
                                         <th className="p-3">Domicilio</th>
+                                        <th className="p-3">Tarjeta Soluciones</th>
                                         {isAdmin && <th className="p-3 text-center">Acciones</th>}
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-neutral-100">
                                     {beneficiarios.length === 0 ? (
                                         <tr>
-                                            <td colSpan={4} className="p-6 text-center text-xs text-neutral-400 italic">
+                                            <td colSpan={5} className="p-6 text-center text-xs text-neutral-400 italic">
                                                 No se han encontrado registros coincidentes.
                                             </td>
                                         </tr>
@@ -479,6 +477,9 @@ export default function ConsultaDinamica() {
                                                     <td className="p-3 whitespace-nowrap">{p.nacimiento}</td>
                                                     <td className="p-3 text-xs text-neutral-500">
                                                         {p.municipio}, Col. {p.colonia}
+                                                    </td>
+                                                    <td className="p-3 text-center font-mono">
+                                                        {p.tarjeta_soluciones || '-'}
                                                     </td>
                                                     {isAdmin && <td className="p-3 text-center">
                                                         <div className="flex items-center justify-center gap-2">
@@ -681,7 +682,7 @@ export default function ConsultaDinamica() {
                             </div>
                             
                             {/* Datos adicionales */}
-                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-5">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
                                 <div id="field-cp">
                                     <InputField 
                                         label="C.P." 
@@ -720,6 +721,24 @@ export default function ConsultaDinamica() {
                                         value={data.telefono} 
                                         onChange={(e) => setData('telefono', e.target.value)} 
                                         error={getFieldError('telefono')} 
+                                    />
+                                </div>
+
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
+                                <div id="field-tarjeta_soluciones">
+                                    <InputField 
+                                        label="Tarjeta Soluciones" 
+                                        id="tarjeta_soluciones" 
+                                        type="text" 
+                                        value={data.tarjeta_soluciones} 
+                                        onChange={(e) => {
+                                            const val = e.target.value.replace(/\D/g, '').slice(0, 7);
+                                            setData('tarjeta_soluciones', val);
+                                        }}
+                                        error={getFieldError('tarjeta_soluciones')}
+                                        placeholder="ej: 1234567"
                                     />
                                 </div>
                                 <div id="field-genero">

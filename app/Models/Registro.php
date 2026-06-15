@@ -32,9 +32,9 @@ class Registro extends Model
         'numint',
         'telefono',
         'papa',
-            // 'id_beneficio',
-            'id_user',
-            'duplicado',
+        'tarjeta_soluciones',
+        'id_user',
+        'duplicado',
         ];
 
         public function beneficios(): \Illuminate\Database\Eloquent\Relations\BelongsToMany

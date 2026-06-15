@@ -71,7 +71,7 @@ export default function Create() {
         cp: '',
         nacimiento: '',
         edad: '',
-        tarjeta: '',
+        tarjeta_soluciones: '',
         genero: '',
         respuestas: {},
         respuestas_multiple: {},
@@ -166,7 +166,7 @@ export default function Create() {
             cp: data.cp,
             nacimiento: data.nacimiento,
             edad: data.edad,
-            tarjeta: data.tarjeta,
+            tarjeta_soluciones: data.tarjeta_soluciones,
             genero: data.genero,
             respuestas: data.respuestas,
             respuestas_multiple: data.respuestas_multiple,
@@ -218,7 +218,7 @@ const handleConfirmarForzado = () => {
         cp: data.cp,
         nacimiento: data.nacimiento,
         edad: data.edad,
-        tarjeta: data.tarjeta,
+        tarjeta_soluciones: data.tarjeta_soluciones,
         genero: data.genero,
         respuestas: data.respuestas,
         respuestas_multiple: data.respuestas_multiple,
@@ -531,6 +531,18 @@ const handleConfirmarForzado = () => {
                                         onChange={(e) => setData('edad', e.target.value)}
                                         error={errors.edad as string}
                                         placeholder="Edad"
+                                    />
+                                                                        <InputField
+                                        label="Tarjeta Soluciones"
+                                        id="tarjeta_soluciones"
+                                        type="number"
+                                        value={data.tarjeta_soluciones}
+                                        onChange={(e) => {
+                                            const val = e.target.value.slice(0, 7);
+                                            setData('tarjeta_soluciones', val);
+                                        }}
+                                        error={errors.tarjeta_soluciones}
+                                        placeholder="ej: 1234567"
                                     />
                                 </div>
                             </div>

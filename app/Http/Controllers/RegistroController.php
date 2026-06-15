@@ -30,15 +30,17 @@ class RegistroController extends Controller
             'colonia'    => ['required', 'string', 'exists:colonias,nombre_de_la_colonia'],
             'calle'      => ['required', 'string', 'exists:calles_aguascalientes,nombre'],
             'municipio'  => ['required', 'string', 'exists:colonias,nombre_del_municipio'],
-            'cp'         => ['nullable', 'numeric', 'digits:5'],
+            'cp'         => ['nullable', 'numeric'],
             'genero'     => ['required', 'string', Rule::in(['M', 'F', 'OTRO'])],
             'edad'       => ['required', 'numeric', 'min:0', 'max:120'],
             'nacimiento' => ['required', 'date', 'before_or_equal:today', 'after_or_equal:1900-01-01'],
             'numext'     => ['required', 'numeric', 'min:1'],
             'numint'     => ['nullable', 'numeric', 'min:1'],
-            'telefono'   => ['required', 'digits:10'],
+            'telefono'   => ['nullable', 'digits:10'],
             'respuestas' => ['nullable', 'array'],
             'respuestas_multiple' => ['nullable', 'array'],
+            'tarjeta_soluciones'   => ['nullable', 'digits:7'],
+
         ];
     }
 
@@ -138,7 +140,7 @@ class RegistroController extends Controller
     /**
      * Convertir datos a mayúsculas
      */
-    private function convertirMayusculas(array $data, array $excluir = ['nacimiento', 'edad', 'telefono'])
+    private function convertirMayusculas(array $data, array $excluir = ['nacimiento', 'edad', 'telefono', 'tarjeta_soluciones'])
     {
         foreach ($data as $key => $value) {
             if (in_array($key, $excluir)) {
@@ -328,6 +330,7 @@ public function store(Request $request)
     $datosFinales = $this->convertirMayusculas($datosParaCrear);
     $datosFinales['id_user'] = Auth::id();
     $datosFinales['duplicado'] = $fuerzaBruta; // ← GUARDAR SI FUE FORZADO
+    $datosFinales['tarjeta_soluciones'] = $request->input('tarjeta_soluciones');
     
     if (is_null($datosFinales['sapellido'] ?? null)) {
         $datosFinales['papa'] = true;
@@ -431,7 +434,6 @@ public function update(Request $request, string $id)
     // Verificar duplicados ANTES de actualizar
     $duplicados = $this->detectarDuplicados($datosValidados, $id);
     if ($duplicados->isNotEmpty()) {
-        // Construir mensaje con los datos del duplicado
         $primerDuplicado = $duplicados->first();
         $mensaje = "No se puede actualizar porque ya existe un registro con estos datos:\n\n";
         $mensaje .= "• Nombre: " . $primerDuplicado->nombre . " " . ($primerDuplicado->snombre ?? '') . "\n";
@@ -463,6 +465,7 @@ public function update(Request $request, string $id)
     }
     
     $datosFinales['id_user'] = Auth::id();
+    $datosFinales['tarjeta_soluciones'] = $request->input('tarjeta_soluciones'); // ← AGREGAR
 
     DB::beginTransaction();
 
