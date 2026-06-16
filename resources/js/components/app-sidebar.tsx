@@ -4,7 +4,7 @@ import { NavUser } from '@/components/nav-user';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { type NavItem } from '@/types';
 import { Link, useForm, usePage } from '@inertiajs/react';
-import { LayoutGrid, LogOut, Notebook, Users, HelpCircle } from 'lucide-react'; // Agregar HelpCircle o Question icon
+import { LayoutGrid, LogOut, Notebook, Users, HelpCircle ,Download } from 'lucide-react'; // Agregar HelpCircle o Question icon
 import AppLogo from './app-logo';
 
 const mainNavItems: NavItem[] = [
@@ -43,6 +43,12 @@ export function AppSidebar() {
                 url: route('preguntas.index'), // Cambiado a preguntas.index
                 icon: HelpCircle, // Icono corregido
             },
+            // Dentro de footerNavItems para admin:
+{
+    title: 'Exportar Datos',
+    url: route('exportacion.index'),
+    icon: Download,
+}
         );
     }
 

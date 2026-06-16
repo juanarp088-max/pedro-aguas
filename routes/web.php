@@ -7,6 +7,7 @@ use App\Http\Controllers\ColoniaController;
 use App\Http\Controllers\Admin\UserController; 
 use App\Http\Controllers\BeneficioController;
 use App\Http\Controllers\Admin\PreguntaController;
+use App\Http\Controllers\ExportacionController;
 use App\Models\Registro;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Artisan;
@@ -21,7 +22,7 @@ Route::get('/test-conexion', function () {
     }
 });
 
-// --- RUTA DE LIMPIEZA (Para solucionar errores de caché tras deploy) ---
+// --- RUTA DE LIMPIEZA ---
 Route::get('/limpiar-todo', function () {
     Artisan::call('route:clear');
     Artisan::call('config:clear');
@@ -54,7 +55,6 @@ Route::middleware(['auth'])->group(function () {
             return response()->json($beneficiario->respuestas);
         })->name('api.beneficiarios.respuestas');
 
-        // ✅ NUEVA RUTA AGREGADA: Para obtener datos completos del beneficiario (edición)
         Route::get('api/beneficiarios/{id}/completo', [RegistroController::class, 'show'])->name('api.beneficiarios.completo');
     });
 
@@ -71,17 +71,24 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/admin/usuarios', [UserController::class, 'index'])->name('admin.users.index');
         Route::post('/admin/usuarios', [UserController::class, 'store'])->name('admin.users.store');
         Route::resource('/admin/beneficio', BeneficioController::class)->names('admin.beneficios');
-    });
-
-    // 4. RUTAS DE PREGUNTAS
-    Route::middleware(['role:admin'])->prefix('preguntas')->name('preguntas.')->group(function () {
-        Route::get('/', [PreguntaController::class, 'index'])->name('index');
-        Route::get('/create', [PreguntaController::class, 'create'])->name('create');
-        Route::post('/', [PreguntaController::class, 'store'])->name('store');
-        Route::get('/{id}/edit', [PreguntaController::class, 'edit'])->name('edit');
-        Route::put('/{id}', [PreguntaController::class, 'update'])->name('update');
-        Route::delete('/{id}', [PreguntaController::class, 'destroy'])->name('destroy');
-        Route::patch('/{id}/toggle', [PreguntaController::class, 'toggle'])->name('toggle');
+        
+        // RUTAS DE PREGUNTAS (solo admin)
+        Route::prefix('preguntas')->name('preguntas.')->group(function () {
+            Route::get('/', [PreguntaController::class, 'index'])->name('index');
+            Route::get('/create', [PreguntaController::class, 'create'])->name('create');
+            Route::post('/', [PreguntaController::class, 'store'])->name('store');
+            Route::get('/{id}/edit', [PreguntaController::class, 'edit'])->name('edit');
+            Route::put('/{id}', [PreguntaController::class, 'update'])->name('update');
+            Route::delete('/{id}', [PreguntaController::class, 'destroy'])->name('destroy');
+            Route::patch('/{id}/toggle', [PreguntaController::class, 'toggle'])->name('toggle');
+        });
+        
+        // RUTAS DE EXPORTACIÓN (solo admin)
+        Route::prefix('exportacion')->name('exportacion.')->group(function () {
+            Route::get('/', [ExportacionController::class, 'index'])->name('index');
+            Route::get('/rango', [ExportacionController::class, 'exportByDate'])->name('rango');
+            Route::get('/todos', [ExportacionController::class, 'exportAll'])->name('todos');
+        });
     });
 });
 

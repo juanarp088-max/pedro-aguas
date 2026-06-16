@@ -503,6 +503,8 @@ const handleConfirmarForzado = () => {
                                         value={data.nacimiento}
                                         onChange={(e) => setData('nacimiento', e.target.value)}
                                         error={errors.nacimiento as string}
+                                        placeholder="dd/mm/yyyy"
+
                                     />
                                     <InputField
                                         label="Teléfono"
