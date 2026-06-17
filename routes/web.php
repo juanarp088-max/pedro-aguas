@@ -71,6 +71,13 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/admin/usuarios', [UserController::class, 'index'])->name('admin.users.index');
         Route::post('/admin/usuarios', [UserController::class, 'store'])->name('admin.users.store');
         Route::resource('/admin/beneficio', BeneficioController::class)->names('admin.beneficios');
+ // RUTAS DE USUARIOS (solo admin)
+            Route::prefix('admin/usuarios')->name('admin.users.')->group(function () {
+            Route::get('/', [UserController::class, 'index'])->name('index');
+            Route::post('/', [UserController::class, 'store'])->name('store');
+            Route::put('/{id}', [UserController::class, 'update'])->name('update');
+            Route::delete('/{id}', [UserController::class, 'destroy'])->name('destroy');
+        });
         
         // RUTAS DE PREGUNTAS (solo admin)
         Route::prefix('preguntas')->name('preguntas.')->group(function () {

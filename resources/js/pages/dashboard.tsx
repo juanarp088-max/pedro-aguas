@@ -41,12 +41,12 @@ export default function Dashboard() {
                         >
                             <span className="text-lg font-semibold text-white">Consultar Usuario</span>
                         </Link>
-                    )}
+                    )} 
 
                     {/* CUADRO 3: Otros (Solo Admin) */}
                     {isAdmin && (
                         <Link 
-                            href='/blank' 
+                            href='/exportacion' 
                             className="relative flex aspect-video items-center justify-center overflow-hidden rounded-xl border border-neutral-200 bg-[#E90481] p-6 text-center transition hover:opacity-90"
                         >
                             <span className="text-lg font-semibold text-white">Otros</span>
