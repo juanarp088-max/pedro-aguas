@@ -117,6 +117,11 @@ return [
     | Supported drivers: "file", "cache"
     |
     */
+    'cache' => [
+    'enable' => true,
+    'driver' => 'array',
+    'memory_limit' => '512M',
+    ],
 
     'maintenance' => [
         'driver' => env('APP_MAINTENANCE_DRIVER', 'file'),

@@ -26,6 +26,10 @@ class ExportacionController extends Controller
     public function exportByDate(Request $request)
     {
         try {
+            ini_set('memory_limit', '1024M');
+            ini_set('max_execution_time', 600);
+            ini_set('max_input_time', 600);
+
             $fechaInicio = $request->input('fecha_inicio');
             $fechaFin = $request->input('fecha_fin');
             $incluirRespuestas = $request->input('incluir_respuestas', false);
@@ -73,6 +77,11 @@ class ExportacionController extends Controller
     public function exportAll(Request $request)
     {
         try {
+
+            ini_set('memory_limit', '1024M');
+            ini_set('max_execution_time', 600);
+            ini_set('max_input_time', 600);
+
             $incluirRespuestas = $request->boolean('incluir_respuestas', false);
             $camposSeleccionados = $request->input('campos', []);
             

@@ -9,13 +9,14 @@ use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Events\AfterSheet;
+use Maatwebsite\Excel\Concerns\WithChunkReading; // 🔥 AGREGAR ESTA LÍNEA
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use Illuminate\Support\Facades\Log;
 
-class BeneficiariosExport implements FromCollection, WithHeadings, WithMapping, ShouldAutoSize, WithEvents
+class BeneficiariosExport implements FromCollection, WithHeadings, WithMapping, ShouldAutoSize, WithEvents , WithChunkReading
 {
     protected $filtros;
     protected $incluirRespuestas;
@@ -55,6 +56,11 @@ class BeneficiariosExport implements FromCollection, WithHeadings, WithMapping, 
         Log::info('Registros encontrados:', ['count' => $count]);
 
         return $query->orderBy('created_at', 'desc')->get();
+    }
+
+        public function chunkSize(): int
+    {
+        return 1000;
     }
 
     public function headings(): array
