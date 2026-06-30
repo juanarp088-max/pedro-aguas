@@ -1,8 +1,6 @@
 import react from '@vitejs/plugin-react';
 import laravel from 'laravel-vite-plugin';
-import {
-    defineConfig
-} from 'vite';
+import { defineConfig } from 'vite';
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
@@ -17,5 +15,13 @@ export default defineConfig({
     ],
     esbuild: {
         jsx: 'automatic',
+    },
+    // 🔥 CONFIGURACIÓN PARA PRODUCCIÓN
+    build: {
+        outDir: 'public/build',
+        manifest: true,
+        rollupOptions: {
+            input: ['resources/js/app.tsx'],
+        },
     },
 });

@@ -1,36 +1,70 @@
 FROM php:8.2-fpm-alpine
 
-RUN apk add --no-cache git curl libpng-dev oniguruma-dev libxml2-dev zip unzip postgresql-dev nodejs npm libzip-dev
+# ============================================
+# 1. INSTALAR DEPENDENCIAS
+# ============================================
+RUN apk add --no-cache \
+    git curl libpng-dev oniguruma-dev libxml2-dev \
+    zip unzip postgresql-dev nodejs npm libzip-dev
 
+# ============================================
+# 2. EXTENSIONES PHP
+# ============================================
 RUN docker-php-ext-install pdo_pgsql bcmath gd mbstring exif pcntl zip
 
+# ============================================
+# 3. COMPOSER
+# ============================================
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 COPY . .
 
-# 🔥 .env con APP_KEY generada automáticamente
+# ============================================
+# 4. CONFIGURAR .env CON TODAS LAS VARIABLES
+# ============================================
 RUN echo "APP_ENV=production" > .env && \
     echo "APP_DEBUG=false" >> .env && \
     echo "APP_URL=https://pedro-aguas-production.up.railway.app" >> .env && \
+    echo "ASSET_URL=https://pedro-aguas-production.up.railway.app" >> .env && \
     echo "DB_CONNECTION=pgsql" >> .env && \
     echo "DB_HOST=postgres.railway.internal" >> .env && \
     echo "DB_PORT=5432" >> .env && \
     echo "DB_DATABASE=railway" >> .env && \
     echo "DB_USERNAME=postgres" >> .env && \
     echo "DB_PASSWORD=dDPPfVNvjFSAUxsqoTKdMAVkQqQWIVZH" >> .env && \
-    echo "APP_KEY=base64:$(openssl rand -base64 32)" >> .env
+    echo "APP_KEY=$(php artisan key:generate --show)" >> .env
 
+# ============================================
+# 5. INSTALAR DEPENDENCIAS PHP
+# ============================================
 RUN composer install --no-dev --optimize-autoloader --no-interaction \
     --ignore-platform-req=ext-bcmath \
     --ignore-platform-req=ext-zip
 
-RUN npm install && (npm run build || npm run production || echo "Build skipped")
+# ============================================
+# 6. COMPILAR ASSETS EN MODO PRODUCCIÓN 🔥
+# ============================================
+RUN npm install && \
+    NODE_ENV=production npm run build
 
+# ============================================
+# 7. VERIFICAR QUE LOS ASSETS EXISTEN
+# ============================================
+RUN echo "=== VERIFICANDO ASSETS ===" && \
+    ls -la public/build/ && \
+    echo "==========================="
+
+# ============================================
+# 8. PERMISOS
+# ============================================
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
 EXPOSE 8080
 
+# ============================================
+# 9. INICIAR SERVIDOR
+# ============================================
 CMD php artisan config:clear && \
     php artisan cache:clear && \
     php artisan view:clear && \
