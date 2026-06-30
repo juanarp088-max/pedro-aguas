@@ -9,6 +9,7 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 WORKDIR /var/www/html
 COPY . .
 
+# 🔥 1. CREAR .env SIN APP_KEY
 RUN echo "APP_ENV=production" > .env && \
     echo "APP_DEBUG=false" >> .env && \
     echo "APP_URL=https://pedro-aguas-production.up.railway.app" >> .env && \
@@ -18,22 +19,27 @@ RUN echo "APP_ENV=production" > .env && \
     echo "DB_PORT=5432" >> .env && \
     echo "DB_DATABASE=railway" >> .env && \
     echo "DB_USERNAME=postgres" >> .env && \
-    echo "DB_PASSWORD=dDPPfVNvjFSAUxsqoTKdMAVkQqQWIVZH" >> .env && \
-    echo "APP_KEY=$(php artisan key:generate --show)" >> .env
+    echo "DB_PASSWORD=dDPPfVNvjFSAUxsqoTKdMAVkQqQWIVZH" >> .env
 
+# 🔥 2. INSTALAR COMPOSER (ANTES DE APP_KEY)
 RUN composer install --no-dev --optimize-autoloader --no-interaction \
     --ignore-platform-req=ext-bcmath \
     --ignore-platform-req=ext-zip
 
+# 🔥 3. GENERAR APP_KEY (DESPUÉS DE COMPOSER)
+RUN php artisan key:generate --force
+
+# 🔥 4. COMPILAR ASSETS
 RUN rm -rf public/build/ && \
     npm install && \
     NODE_ENV=production npm run build
 
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache && \
-    chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
+# 🔥 5. PERMISOS
+RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
 EXPOSE 8080
 
+# 🔥 6. INICIAR
 CMD php artisan config:clear && \
     php artisan cache:clear && \
     php artisan view:clear && \
