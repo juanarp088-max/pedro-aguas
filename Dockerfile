@@ -1,19 +1,57 @@
-# Usar imagen específica para Laravel con PostgreSQL
-FROM coreconst/php-fpm-alpine-libs:8.2
+FROM php:8.2-fpm-alpine
 
-# INSTALAR COMPOSER
+# ============================================
+# 1. DEPENDENCIAS DEL SISTEMA (CON ZIP)
+# ============================================
+RUN apk add --no-cache \
+    git \
+    curl \
+    libpng-dev \
+    oniguruma-dev \
+    libxml2-dev \
+    zip \          # ✅ HERRAMIENTA ZIP
+    unzip \        # ✅ HERRAMIENTA UNZIP
+    postgresql-dev \
+    nodejs \
+    npm \
+    libzip-dev     # ✅ LIBRERÍA ZIP PARA PHP
+
+# ============================================
+# 2. EXTENSIONES PHP (CON ZIP)
+# ============================================
+RUN docker-php-ext-install \
+    pdo_pgsql \
+    bcmath \
+    gd \
+    mbstring \
+    exif \
+    pcntl \
+    zip            # ✅ EXTENSIÓN ZIP DE PHP
+
+# ============================================
+# 3. COMPOSER
+# ============================================
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# CONFIGURAR DIRECTORIO DE TRABAJO
 WORKDIR /var/www/html
-
-# COPIAR TODO EL PROYECTO
 COPY . .
 
-# INSTALAR DEPENDENCIAS DE PHP
-RUN composer install --no-dev --optimize-autoloader --no-interaction
+# ============================================
+# 4. INSTALAR DEPENDENCIAS (CON IGNORE PARA ZIP)
+# ============================================
+RUN composer install --no-dev --optimize-autoloader --no-interaction \
+    --ignore-platform-req=ext-bcmath \
+    --ignore-platform-req=ext-zip
 
-# CONFIGURAR PERMISOS
+# ============================================
+# 5. COMPILAR ASSETS (SI USAS VITE)
+# ============================================
+RUN npm install && \
+    NODE_ENV=production npm run build
+
+# ============================================
+# 6. PERMISOS
+# ============================================
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
 EXPOSE 8080
