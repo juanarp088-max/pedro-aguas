@@ -1,28 +1,14 @@
 FROM php:8.2-fpm-alpine
 
-# ============================================
-# 1. INSTALAR DEPENDENCIAS
-# ============================================
-RUN apk add --no-cache \
-    git curl libpng-dev oniguruma-dev libxml2-dev \
-    zip unzip postgresql-dev nodejs npm libzip-dev
+RUN apk add --no-cache git curl libpng-dev oniguruma-dev libxml2-dev zip unzip postgresql-dev nodejs npm libzip-dev
 
-# ============================================
-# 2. EXTENSIONES PHP
-# ============================================
 RUN docker-php-ext-install pdo_pgsql bcmath gd mbstring exif pcntl zip
 
-# ============================================
-# 3. COMPOSER
-# ============================================
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 COPY . .
 
-# ============================================
-# 4. CONFIGURAR .env CON TODAS LAS VARIABLES
-# ============================================
 RUN echo "APP_ENV=production" > .env && \
     echo "APP_DEBUG=false" >> .env && \
     echo "APP_URL=https://pedro-aguas-production.up.railway.app" >> .env && \
@@ -35,36 +21,19 @@ RUN echo "APP_ENV=production" > .env && \
     echo "DB_PASSWORD=dDPPfVNvjFSAUxsqoTKdMAVkQqQWIVZH" >> .env && \
     echo "APP_KEY=$(php artisan key:generate --show)" >> .env
 
-# ============================================
-# 5. INSTALAR DEPENDENCIAS PHP
-# ============================================
 RUN composer install --no-dev --optimize-autoloader --no-interaction \
     --ignore-platform-req=ext-bcmath \
     --ignore-platform-req=ext-zip
 
-# ============================================
-# 6. COMPILAR ASSETS EN MODO PRODUCCIÓN 🔥
-# ============================================
-RUN npm install && \
+RUN rm -rf public/build/ && \
+    npm install && \
     NODE_ENV=production npm run build
 
-# ============================================
-# 7. VERIFICAR QUE LOS ASSETS EXISTEN
-# ============================================
-RUN echo "=== VERIFICANDO ASSETS ===" && \
-    ls -la public/build/ && \
-    echo "==========================="
-
-# ============================================
-# 8. PERMISOS
-# ============================================
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache && \
+    chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
 EXPOSE 8080
 
-# ============================================
-# 9. INICIAR SERVIDOR
-# ============================================
 CMD php artisan config:clear && \
     php artisan cache:clear && \
     php artisan view:clear && \
