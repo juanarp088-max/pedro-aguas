@@ -3,6 +3,7 @@ import { Head } from '@inertiajs/react';
 import { useState } from 'react';
 import Swal from 'sweetalert2';
 import withReactContent from 'sweetalert2-react-content';
+import axios from 'axios';
 
 const MySwal = withReactContent(Swal);
 
@@ -45,6 +46,7 @@ export default function Exportar() {
     const [fechaFin, setFechaFin] = useState('');
     const [incluirRespuestas, setIncluirRespuestas] = useState(false);
     const [exportando, setExportando] = useState(false);
+    const [progreso, setProgreso] = useState(0);
     const [tipoExportacion, setTipoExportacion] = useState<'rango' | 'todos'>('rango');
     const [camposSeleccionados, setCamposSeleccionados] = useState<string[]>([]);
     const [seleccionarTodos, setSeleccionarTodos] = useState(false);
@@ -63,14 +65,12 @@ export default function Exportar() {
         if (camposSeleccionados.includes(campoId)) {
             const nuevos = camposSeleccionados.filter(c => c !== campoId);
             setCamposSeleccionados(nuevos);
-            // Si no hay campos seleccionados, desmarcar "Seleccionar todos"
             if (nuevos.length === 0) {
                 setSeleccionarTodos(false);
             }
         } else {
             const nuevos = [...camposSeleccionados, campoId];
             setCamposSeleccionados(nuevos);
-            // Si están todos seleccionados, marcar "Seleccionar todos"
             if (nuevos.length === camposDisponibles.length) {
                 setSeleccionarTodos(true);
             }
@@ -89,7 +89,6 @@ export default function Exportar() {
             return;
         }
 
-        // Si no hay campos seleccionados y no está marcado "Seleccionar todos"
         if (camposSeleccionados.length === 0 && !seleccionarTodos) {
             MySwal.fire({
                 title: 'Campos no seleccionados',
@@ -101,12 +100,12 @@ export default function Exportar() {
         }
 
         setExportando(true);
+        setProgreso(0);
 
         try {
-            // Construir URL con parámetros
+            // Construir parámetros
             const params = new URLSearchParams();
             
-            // Añadir parámetros según el tipo de exportación
             if (tipoExportacion === 'rango') {
                 params.append('fecha_inicio', fechaInicio);
                 params.append('fecha_fin', fechaFin);
@@ -114,22 +113,17 @@ export default function Exportar() {
             
             params.append('incluir_respuestas', incluirRespuestas ? '1' : '0');
             
-            // Determinar qué campos enviar
             let camposParaEnviar = [];
             if (seleccionarTodos) {
-                // Si está marcado "Seleccionar todos", enviar TODOS los campos
                 camposParaEnviar = camposDisponibles.map(c => c.id);
             } else {
-                // Si no, enviar solo los seleccionados
                 camposParaEnviar = camposSeleccionados;
             }
             
-            // Añadir cada campo como parámetro individual
             camposParaEnviar.forEach(campo => {
                 params.append('campos[]', campo);
             });
 
-            // Determinar la ruta según el tipo de exportación
             const ruta = tipoExportacion === 'rango' ? 'exportacion.rango' : 'exportacion.todos';
             const url = route(ruta) + '?' + params.toString();
 
@@ -137,36 +131,100 @@ export default function Exportar() {
             console.log('URL:', url);
             console.log('Campos a exportar:', camposParaEnviar);
             console.log('Incluir respuestas:', incluirRespuestas);
-            console.log('Tipo exportación:', tipoExportacion);
-            if (tipoExportacion === 'rango') {
-                console.log('Fecha inicio:', fechaInicio);
-                console.log('Fecha fin:', fechaFin);
-            }
 
-            // Abrir en nueva ventana para descarga
-            const ventana = window.open(url, '_blank');
-            
-            // Si la ventana se bloqueó, mostrar mensaje
-            if (!ventana) {
-                MySwal.fire({
-                    title: 'Ventana bloqueada',
-                    text: 'Por favor permita ventanas emergentes para descargar el archivo',
-                    icon: 'warning',
-                    confirmButtonColor: '#1FB7E9'
-                });
-                setExportando(false);
-                return;
-            }
-
-            // Mostrar mensaje de éxito
+            // ✅ Mostrar SweetAlert de progreso
             MySwal.fire({
-                title: 'Exportación iniciada',
-                text: 'El archivo Excel se está generando y descargará automáticamente',
-                icon: 'success',
-                timer: 3000,
-                showConfirmButton: false
+                title: 'Generando archivo...',
+                html: `
+                    <div class="flex flex-col items-center gap-4">
+                        <div class="w-16 h-16 border-4 border-[#1FB7E9] border-t-transparent rounded-full animate-spin"></div>
+                        <p class="text-sm text-neutral-600">Procesando datos, por favor espere...</p>
+                        <div class="w-full max-w-xs bg-neutral-200 rounded-full h-2.5">
+                            <div id="progress-bar" class="bg-[#1FB7E9] h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                        <p id="progress-text" class="text-xs text-neutral-500">0%</p>
+                    </div>
+                `,
+                showConfirmButton: false,
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                didOpen: () => {
+                    // Simular progreso mientras se genera
+                    let progress = 0;
+                    const interval = setInterval(() => {
+                        progress += Math.random() * 15;
+                        if (progress > 90) progress = 90;
+                        const bar = document.getElementById('progress-bar');
+                        const text = document.getElementById('progress-text');
+                        if (bar) bar.style.width = progress + '%';
+                        if (text) text.textContent = Math.round(progress) + '%';
+                        setProgreso(Math.round(progress));
+                    }, 300);
+
+                    // Hacer la petición con axios
+                    axios.get(url, {
+                        responseType: 'blob',
+                        onDownloadProgress: (progressEvent) => {
+                            if (progressEvent.total) {
+                                const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                                const bar = document.getElementById('progress-bar');
+                                const text = document.getElementById('progress-text');
+                                if (bar) bar.style.width = percent + '%';
+                                if (text) text.textContent = percent + '%';
+                                setProgreso(percent);
+                            }
+                        }
+                    }).then((response) => {
+                        clearInterval(interval);
+                        
+                        // Completar barra
+                        const bar = document.getElementById('progress-bar');
+                        const text = document.getElementById('progress-text');
+                        if (bar) bar.style.width = '100%';
+                        if (text) text.textContent = '100%';
+                        setProgreso(100);
+
+                        // Crear y descargar el archivo
+                        const blob = new Blob([response.data], { 
+                            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+                        });
+                        const downloadUrl = window.URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = downloadUrl;
+                        const fechaActual = new Date().toISOString().split('T')[0];
+                        link.download = `beneficiarios_${fechaActual}.xlsx`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        window.URL.revokeObjectURL(downloadUrl);
+
+                        // Cerrar SweetAlert y mostrar éxito
+                        MySwal.close();
+                        MySwal.fire({
+                            title: '¡Exportación completada!',
+                            text: 'El archivo se ha descargado correctamente',
+                            icon: 'success',
+                            confirmButtonColor: '#1FB7E9',
+                            timer: 3000,
+                            timerProgressBar: true,
+                        });
+                        
+                        setExportando(false);
+                    }).catch((error) => {
+                        clearInterval(interval);
+                        console.error('Error:', error);
+                        MySwal.close();
+                        MySwal.fire({
+                            title: 'Error',
+                            text: 'No se pudo generar el archivo. Por favor intente nuevamente.',
+                            icon: 'error',
+                            confirmButtonColor: '#EF4444'
+                        });
+                        setExportando(false);
+                    });
+                }
             });
-            
+
         } catch (error) {
             console.error('Error al exportar:', error);
             MySwal.fire({
@@ -175,7 +233,6 @@ export default function Exportar() {
                 icon: 'error',
                 confirmButtonColor: '#EF4444'
             });
-        } finally {
             setExportando(false);
         }
     };
@@ -352,7 +409,7 @@ export default function Exportar() {
                                     type="button"
                                     onClick={handleExportar}
                                     disabled={exportando || (tipoExportacion === 'rango' && (!fechaInicio || !fechaFin))}
-                                    className="rounded-lg bg-[#1FB7E9] px-8 py-2.5 text-sm font-bold text-white shadow-md hover:bg-[#1699c2] hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] inline-flex items-center gap-2"
+                                    className="rounded-lg bg-[#1FB7E9] px-8 py-2.5 text-sm font-bold text-white shadow-md hover:bg-[#1699c2] hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-[1.02] inline-flex items-center gap-2 min-w-[180px] justify-center"
                                 >
                                     {exportando ? (
                                         <>
@@ -360,7 +417,8 @@ export default function Exportar() {
                                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                             </svg>
-                                            Generando...
+                                            <span>Generando...</span>
+                                            <span className="text-xs opacity-75">({progreso}%)</span>
                                         </>
                                     ) : (
                                         <>
