@@ -47,4 +47,14 @@ class Registro extends Model
     // Y que la tabla intermedia se llame 'respuesta'
     return $this->hasMany(Respuesta::class, 'registro_id');
     }
+
+            public function registros()
+    {
+        return $this->hasMany(Registro::class, 'id_user');
+    }
+
+    public function user()
+{
+    return $this->belongsTo(User::class, 'id_user');
+}
     }
