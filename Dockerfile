@@ -1,31 +1,47 @@
+# --- Etapa 1: Construcción del Frontend ---
+FROM node:20 AS build-frontend
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npm run build
+
+# --- Etapa 2: Entorno de PHP ---
 FROM php:8.2-fpm-alpine
 
-# 🔥 INSTALAR DEPENDENCIAS (UNA SOLA LÍNEA)
-RUN apk add --no-cache git curl libpng-dev oniguruma-dev libxml2-dev zip unzip postgresql-dev nodejs npm libzip-dev
+# Instalar dependencias del sistema necesarias para PostgreSQL y Laravel
+RUN apk add --no-cache \
+    libpng-dev \
+    libzip-dev \
+    zip \
+    unzip \
+    git \
+    postgresql-dev \
+    nginx
 
-# 🔥 INSTALAR EXTENSIONES PHP
-RUN docker-php-ext-install pdo_pgsql bcmath gd mbstring exif pcntl zip
+# Instalar extensiones de PHP requeridas
+RUN docker-php-ext-install pdo pdo_pgsql gd zip
 
-# 🔥 COMPOSER
+# Instalar Composer desde su imagen oficial
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
+# Configurar directorio de trabajo
 WORKDIR /var/www/html
+
+# Copiar archivos del proyecto
 COPY . .
 
-# 🔥 DEPENDENCIAS PHP
-RUN composer install --no-dev --optimize-autoloader --no-interaction \
-    --ignore-platform-req=ext-bcmath \
-    --ignore-platform-req=ext-zip
+# Copiar los activos compilados (CSS/JS) desde la Etapa 1
+COPY --from=build-frontend /app/public/build ./public/build
 
-# 🔥 ASSETS (VITE)
-RUN npm install && NODE_ENV=production npm run build
+# Instalar dependencias de PHP (sin desarrollo para optimizar espacio)
+RUN composer install --no-dev --optimize-autoloader --no-interaction
 
-# 🔥 PERMISOS
+# Asignar permisos necesarios
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
+# Exponer el puerto que usará el servidor
 EXPOSE 8080
 
-# 🔥 INICIAR
-CMD php artisan migrate --force && \
-    php artisan db:seed --class=AdminUserSeeder --force && \
-    php artisan serve --host=0.0.0.0 --port=8080
+# Comando para ejecutar las migraciones (reinicia tablas) y levantar el servidor
+CMD php artisan migrate --force && php artisan db:seed --class=AdminUserSeeder --force && php artisan serve --host=0.0.0.0 --port=8080
